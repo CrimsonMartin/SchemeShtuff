@@ -129,20 +129,16 @@
     (else (equals (secondelement input) (thirdelement input) (declare (secondelement input) cstate)))))
 
 
-
+(define (isVariable? var cstate)
+  (if (not (null? (m_state_lookup var cstate))) #t
+      #f))
 
 ;reads whatever the unput is and sends to the helper methods depending on what is needed
 (define (read input cstate)
   (cond
     ((null?  input) cstate)
-    (else (read (cdr input) (m_state (car input) cstate)))))
 
-
-(define (m_state expression cstate)
-  (cond
-    ;TODO check read expression or cdr expression
-    ((equal? 'var (firstelement expression)) (declarevariable expression cstate))
-    ((equal? 'return (firstelement expression)) (evaluate (restof expression) cstate))
+    ((equal? 'for (firstelement input)) (m_for
     ;check assignment
     ;intexpression
     ;boolexpression
@@ -153,48 +149,57 @@
 
     ;test for binary operators
     ;(operator <input1> <input2>)
+    ;if it needs to call evaluate or needs to call mstate
+    
+    (else (read (cdr input) (m_state (car input) cstate)))))
+
+
+(define (m_state expression cstate)
+  (cond
+    
+    ((equal? 'var (firstelement expression)) (declarevariable expression cstate))
+    ;if we see return need to break
+    ((equal? 'return (firstelement expression)) (return evaluate (restof expression) cstate))
+
     
     ;if the first statement is (var ....)
     ;if the first statement is (return ...)
     
-    (else (read (cdr input) cstate))))
+    (else (read (restof expression) (m_state (firstelement expression) cstate))))
 
 
 ;TODO test this
-(define (evaluate expression cstate)
+(define (m_evaluate expression cstate)
   (cond
     ((null? expression) expresssion)
-    ((number? expression) expression)
-    ((ismember? expression '(true TRUE True false False FALSE)) expression)
-    ((isVariable? expression) (m_state_lookup expression cstate)); I don't like this
+    ((number? expression)  expression)
+    ((ismember? expression '(true false)) expression)
+    ((isVariable? expression) (m_state_lookup expression cstate))
     ((ismember? (firstelement expression) '(< > <= >= == != && ||)) (booleanevaluate expression cstate))
-    ((ismember? (firstelement expression) '(+ - * / %)) (intevaluate expression cstate))
-    (evaluate (firstelement expression) (
+    ((ismember? (firstelement expression) '(+ - * / %))  (intevaluate expression cstate))
+    ;the first element is a list TODO fix this, not sure it's right
+    (else (m_state (m_evaluate (firstelement expression) cstate) (m_state restof expression) ))))
 
-;(return <expression>)
-(define (returnvalue input cstate)
-  (cond
-    ((number? input) input)
-    ((isVariable? input cstate) (m_state_lookup input cstate ))
-    (input cstate)))
 
-(define (isVariable? var cstate)
-  (if (not (null? (m_state_lookup var cstate))) #t
-      #f))
 
 
 ;TODO return 'true' or 'false' rather than #t or #f
 ;if (booleanevaluate) 'true' else 'false'
-(define (booleanevaluate expression cstate)
+(define (booleanevaluate expression cstate return)
   (cond
+    ((number? expression) (return expression)
+    ((boolean? expression) (return expression)
+    ((ismember? expression '(true false)) (return expression))
+    ((isVariable? expression) (return (m_state_lookup expression cstate)))
     ((equal? '< (firstelement  expression))
-     (< (booleanevaluate (secondelement expression) cstate) (booleanevaluate (thirdelement expression) cstate)))
+     (< (lambda (v) (m_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
     ((equal? '> (firstelement  expression))
-     (> (booleanevaluate (secondelement expression) cstate) (booleanevaluate (thirdelement expression) cstate)))
+     (> (m_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
     ((equal? '&& (firstelement expression))
-     (and (booleanevaluate (secondelement expression) cstate)))
+     (and (m_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
     ((equal? '|| (firstelement expression))
-     (or (booleanevaluate (secondelement expression) cstate)))))
+     (or (booleanm_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
+    (else (undefinederror))))
 
 
 (define (intevaluate expression cstate)
@@ -236,28 +241,32 @@
 ;flow control methods
 ;------------------------------------------------------------
 ;from test answers and notes in class
-(define (m_state_for statement1 condition statement2 statement3 cstate break)
-   (if (booleanevaluate condition (m_state statement1 state))
-   (for '() condition statement2 statement3 (m_state statement2 (m_state statement3 (m_state statement1 cstate))) break)
-   (m_state (statement1 cstate))))
+(define (m_for statement1 condition statement2 statement3 cstate break)
+   (if (booleanevaluate condition (m_state statement1 state) break)
+   (m_for '() condition statement2 statement3 (m_state statement2 (m_state statement3 (m_state statement1 cstate))) break)
+   (m_state (statement1 cstate) break)))
 
-(define (m_state_if condition then else cstate)
+(define (m_if condition then else cstate)
   (if (booleanevaluate condition) (m_state then cstate)
       (m_state else cstate)))
 
-(define (m_state_while condition statement cstate)
-  (if (booleanevaluate condition) (m_state_while condition (m_state statement cstate))
+(define (m_while condition statement cstate)
+  (if (booleanevaluate condition) (m_while condition (m_state statement cstate))
       cstate))
 
 ;on open bracket, add a new layer to the state
 (define (openbracket cstate)
   (add_layer emptylayer cstate))
-;on close bracket, remove the top most layer from the stack
+
+;on close bracket, remove the top most layer from the state
 (define (closebracket cstate)
   (getNextLayers cstate))
 
-(define (m_state_try statement catchstatement cstate break)
+(define (m_try statement catchstatement cstate break)
   ())
 
 
+
+
+;TODO remove this
 (define testlayer '((t v g y s g thsi x) (1 2 3 4 5 6 7 8)))
