@@ -199,17 +199,34 @@
 ;------------------------------------------------------------------------------------------
 ;M_state methods
 ;------------------------------------------------------------------------------------------
+;needs to handle: (begin try catch finally continue var = if while return)
 (define stateEvaluate-helper
   (lambda (expr state break)
     (cond
       ;Null check
       ((null? expr) (error emptyInputError))
       ;Declare var
-      ((eq? (car expr) 'var) (cond
+      ((eq? (firstElement expr) 'var) (cond
                                     ((null? (restOf2 expr)) (addVar (secondElement expr) state))
-                                    ;(else (setStateVar (secondElement expr) (M_value (3rdInput expr) (declareVar (2ndInput statement) state)) (declareVar (2ndInput statement) state)))))
-      )))
-    ))
+                                    ;(else (setStateVar (secondElement expr) (M_value (3rdInput expr)
+                                    ;(declareVar (2ndInput statement) state)) (declareVar (2ndInput statement) state)))))
+      ))
+      ;set the value of a var
+      ((eq? (firstElement expr) '=)   )
+
+      ((eq? (firstElement expr) 'begin)   )
+      ((eq? (firstElement expr) 'try)   )
+      ((eq? (firstElement expr) 'catch)   )
+      ((eq? (firstElement expr) 'finally)   )
+      ((eq? (firstElement expr) 'continue)   )
+      ;flow control
+      ((eq? (firstElement expr) 'if) (m_if (secondElement expr) thenexpr elseexpr state break))
+      ((eq? (firstElement expr) 'while) (m_while (secondElement expr) body state break))
+      ((eq? (firstElement expr) 'for) (m_for statement1 condition statement2 statement3 state break))
+      ;break continuation
+      ((eq? (firstElement expr) 'return) (break (evaluate (restOf expr)) ))
+
+    )))
 
 (define stateEvaluate
   (lambda (expr state)
@@ -231,7 +248,7 @@
       ((pair? expr)
           (cond
             ;Uniary -
-            ((and (eq? (firstElement expr) '-) (null? (restOf2 expr))) (* -1 (intEvaluate (thirdElement expr) state)))
+            ((and (eq? (firstElement expr) '-) (null? (restOf2 expr))) (* -1 (intEvaluate (secondElement expr) state)))
             ;+
             ((eq? '+ (firstElement expr)) (+ (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
             ;-
