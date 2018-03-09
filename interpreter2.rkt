@@ -17,10 +17,12 @@
 ; Abstraction for errors
 ;----------------------------------------------------------------------------
 
-(define reassignError "error- reassigning")
-(define declaringError "error- using a variable before declaring")
-(define assigningError "error- using a variable before assigning")
+(define reassignError "error - reassigning")
+(define declaringError "error - using a variable before declaring")
+(define assigningError "error - using a variable before assigning")
 (define undefinedError "Undefined Operator")
+(define emptyInputError "error - empty input")
+(define invalidStateError "error - invalid state")
 
 ;----------------------------------------------------------------------------
 ; Abstraction for predefined definitions
@@ -34,22 +36,27 @@
 ;----------------------------------------------------------------------------
 ; Abstraction for input-related helper functions
 ;----------------------------------------------------------------------------
-;Abstraction for getting first element of input
+;Abstraction for getting first element of input list
 (define firstElement
   (lambda (input)
     (car input)))
 
-;Abstraction for getting >1st element of input
+;Abstraction for removing 1st element of input list
 (define restOf
   (lambda (input)
     (cdr input)))
 
-;Abstraction for getting second element of input
+;Abstraction for getting second element of input list
 (define secondElement
   (lambda (input)
     (cadr input)))
 
-;Abstraction for getting third element of input
+;Abstraction for getting first 2 elements of input list
+(define restOf2
+  (lambda (input)
+    (cddr input)))
+
+;Abstraction for getting third element of input list
 (define thirdElement
   (lambda (input)
     (caddr input)))
@@ -108,9 +115,9 @@
   (lambda (layer)
     (secondElement layer)))
 
-;Return the value of the first occurence of a variable (x) from state
+;Return the value of the first occurence of a variable (x) in state
 ;Throws error if variable doesn't exist, or if value does not exist
-(define getXVal
+(define getXVal-helper
   (lambda (x state)
     (cond
       ((null? state) (error declaringError))
@@ -119,3 +126,112 @@
       ((eq? x (firstElement (getLayerVar (getLayer state)))) (firstElement (getLayerVal (getLayer state))))
       (else (getXVal x (cons (removeFirstVarPair (getLayer state)) (removeLayer state)))))))
 
+(define getXVal
+  (lambda (x state)
+    (if (eq? 'UNDEF (getXVal-helper x state))
+        (error assigningError)
+        (getXVal-helper x state))))
+
+;------------------------------------------------------------------------------------------
+;interpreter methods
+;------------------------------------------------------------------------------------------
+;Main function
+(define interpret
+  (lambda (filePathName)
+    (read (parser filePathName) initialState)))
+
+;Read
+;Denotes expression and assign expressions to further functions
+(define read-cps
+  (lambda (expr state return)
+    (cond
+      ((null? expr) return (error emptyInputError))
+      ((null? state) return (error invalidStateError))
+      ((list? firstElement expr) (read-cps (car expr) state (lambda (newState) (return (read-cps newState return)))))
+      ((isMember? (firstElement expr) '(< > <= >= == != && ||)) (booleanEvaluate expr state return))
+      ((isMember? (firstElement expr) '(+ - * / %))  (intEvaluate expr state return))
+      ((isMember? (firstElement expr)
+                '(begin try catch finally continue var = if while return))
+       (stateEvaluate expr state return))
+      (else (error undefinedError)))))
+
+(define read
+  (lambda (expr state)
+    (read-cps (expr state (lambda (v) v)))))
+
+;helper for the read method, to determine which helper method to call
+(define (isMember? a lis)
+  (cond
+    ((null? lis) #f)
+    ((equal? a (car lis)) #t)
+    (else (isMember? a (cdr lis)))))
+
+;------------------------------------------------------------------------------------------
+;M_state methods
+;------------------------------------------------------------------------------------------
+(define stateEvaluate
+  (lambda (expr state return)
+    (cond
+      ;Null check
+      ((null? expr) return (error emptyInputError))
+      ;Declare var
+      ((eq? (car expr) 'var) (cond
+                                    ((null? (restOf2 expr)) (addVar (secondElement expr) state))
+                                    ;(else (setStateVar (secondElement expr) (M_value (3rdInput expr) (declareVar (2ndInput statement) state)) (declareVar (2ndInput statement) state)))))
+      )))
+    ))
+;------------------------------------------------------------------------------------------
+;M_value methods
+;------------------------------------------------------------------------------------------
+(define intEvaluate
+  (lambda (expr state)
+    (cond
+      ;Null check
+      ((null? expr) (error 'M_value "Evaluating an empty expression"))
+      ;Number check
+      ((number? expr) expr)
+      ;List check No need to check for operators if input is not a list
+      ((pair? expr)
+          (cond
+            ;Uniary -
+            ((and (eq? (firstElement expr) '-) (null? (restOf2 expr))) (* -1 (intEvaluate (thirdElement expr) state)))
+            ;+
+            ((eq? '+ (firstElement expr)) (+ (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+            ;-
+            ((eq? '- (firstElement expr)) (- (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+            ;*
+            ((eq? '* (firstElement expr)) (* (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+            ;/
+            ((eq? '/ (firstElement expr)) (quotient (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+            ;%
+            ((eq? '% (firstElement expr)) (remainder (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+            ;Unknown Operator
+            (else (error undefinedError))))
+      ;See a variable
+      (else (getXVal expr state)))))
+
+;Test template: (intEvaluate '(+ 1 2) '(((a b c) (1 2 3)) ((d e f) (4 5 6))))
+
+;------------------------------------------------------------------------------------------
+;M_boolean methods
+;------------------------------------------------------------------------------------------
+;if (booleanevaluate) 'true' else 'false'
+(define booleanEvaluate-helper
+  (lambda (expr state)
+    (cond
+      ;Null check
+      ((null? expr) (error emptyInputError))
+      ((null? state) (error invalidStateError))
+      ((eq? (firstElement expr) '==) (eq? (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ((eq? (firstElement expr) '!=) (not (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ((eq? (firstElement expr) '<) (< (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ((eq? (firstElement expr) '>) (> (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ((eq? (firstElement expr) '<=) (<= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ((eq? (firstElement expr) '>=) (>= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      (else (error 'M_boolean "Passed in a wrong expression")))))
+
+(define booleanEvaluate
+  (lambda (expression state)
+    (if (booleanEvaluate)
+        'true
+        'false)))
