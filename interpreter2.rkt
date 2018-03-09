@@ -216,7 +216,7 @@
     (call/cc
      (lambda (break)
        (stateEvaluate-helper expr state break)))))
-    
+
 ;------------------------------------------------------------------------------------------
 ;M_value methods
 ;------------------------------------------------------------------------------------------
@@ -259,6 +259,9 @@
       ;Null check
       ((null? expr) (error emptyInputError))
       ((null? state) (error invalidStateError))
+      ;check raw boolean
+      ((equal? expr 'true) #t)
+      ((eq? expr 'false) #f)
       ;==
       ((eq? (firstElement expr) '==) (eq? (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
       ;!=
@@ -271,6 +274,10 @@
       ((eq? (firstElement expr) '<=) (<= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
       ;>=
       ((eq? (firstElement expr) '>=) (>= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ;||
+      ((eq? (firstElement expr) '||) (or (booleanEvaluate (secondElement expr) state)  (booleanEvaluate (thirdElement expr) state)))
+      ;&&
+      ((eq? (firstElement expr) '&&) (and (booleanEvaluate (secondElement expr) state)  (booleanEvaluate (thirdElement expr) state)))
       ;Unrecognized operator
       (else (error 'undefinedError)))))
 
