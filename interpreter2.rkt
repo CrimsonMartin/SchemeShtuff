@@ -263,7 +263,7 @@
       ((pair? expr)
           (cond
             ;Uniary -
-            ((and (eq? (firstElement expr) '-) (null? (restOf2 expr))) (* -1 (intEvaluate (thirdElement expr) state)))
+            ((and (eq? (firstElement expr) '-) (null? (restOf2 expr))) (* -1 (intEvaluate (secondElement expr) state)))
             ;+
             ((eq? '+ (firstElement expr)) (+ (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
             ;-
