@@ -35,12 +35,15 @@
 
 
 ;----------------------------------------------------------------------------
-; Abstraction for miscellaneous helper functions
+; Miscellaneous abstractions
 ;----------------------------------------------------------------------------
 ;Put input into an empty
 (define addToEmptyList
   (lambda (n)
     (cons n '())))
+
+;Undefined
+(define undefined 'UNDEF)
 
 ;----------------------------------------------------------------------------
 ; Abstraction for input-related helper functions
@@ -113,11 +116,11 @@
   (lambda (layer)
     (firstElement layer)))
 
-;Add a variable to first layer of state
+;Add a variable and its value to first layer of state
 (define addVar
-  (lambda (var state)
+  (lambda (var val state)
     (cons (cons (cons var (getLayerVar(getLayer state)))
-                (addToEmptyList (cons 'UNDEF (getLayerVal (getLayer state)))))
+                (addToEmptyList (cons val (getLayerVal (getLayer state)))))
           (removeLayer state))))
 
 ;Set a variable's assigned value to val
@@ -162,7 +165,7 @@
 
 (define getXVal
   (lambda (x state)
-    (if (eq? 'UNDEF (getXVal-helper x state))
+    (if (eq? undefined (getXVal-helper x state))
         (error assigningError)
         (getXVal-helper x state))))
 
@@ -170,28 +173,36 @@
 ;interpreter methods
 ;------------------------------------------------------------------------------------------
 ;Main function
+(define interpret-helper
+  (lambda (filePathName mainBreak)
+    (read (parser filePathName) initialState mainBreak)))
+
 (define interpret
   (lambda (filePathName)
-    (read (parser filePathName) initialState)))
+    (call/cc
+     (lambda (mainBreak)
+       (interpret-helper filePathName mainBreak)))))
 
 ;Read
 ;Denotes expression and assign expressions to further functions
 (define read-cps
-  (lambda (expr state return)
+  (lambda (expr state return mainBreak subExpressionBreak)
     (cond
       ((null? expr) return (error emptyInputError))
       ((null? state) return (error invalidStateError))
-      ((list? firstElement expr) (read-cps (car expr) state (lambda (newState) (return (read-cps newState return)))))
+      ((list? firstElement expr) (read-cps (car expr) state (lambda (newState) (return (read-cps newState return))) mainBreak))
       ((isMember? (firstElement expr) '(< > <= >= == != && ||)) (booleanEvaluate expr state return))
       ((isMember? (firstElement expr) '(+ - * / %))  (intEvaluate expr state return))
       ((isMember? (firstElement expr)
                 '(begin try catch finally continue var = if while return))
-       (stateEvaluate expr state return))
+       (stateEvaluate expr state return mainBreak subExpressionBreak))
       (else (error undefinedError)))))
 
 (define read
-  (lambda (expr state)
-    (read-cps (expr state (lambda (v) v)))))
+  (lambda (expr state mainBreak)
+    (call/cc
+     (lambda (subExpressionBreak
+              (read-cps (expr state (lambda (v) v) mainBreak subExpressionBreak)))))))
 
 ;helper for the read method, to determine which helper method to call
 (define (isMember? a lis)
@@ -204,19 +215,16 @@
 ;M_state methods
 ;------------------------------------------------------------------------------------------
 (define stateEvaluate-helper
-  (lambda (expr state break)
+  (lambda (expr state mainBreak break2)
     (cond
       ;Null check
       ((null? expr) (error emptyInputError))
       ;Declare var
-      ((eq? (firstElement expr) 'var) (cond
-                                    ((null? (restOf2 expr)) (addVar (secondElement expr) state))
-                                    ;(else (setStateVar (secondElement expr) (M_value (3rdInput expr)
-                                    ;(declareVar (2ndInput statement) state)) (declareVar (2ndInput statement) state)))))
-      ))
+      ((eq? (firstElement expr) 'var) (stateVar expr state break2))
       ;set the value of a var
-      ((eq? (firstElement expr) '=)   )
-
+      ((eq? (firstElement expr) '=) (stateEqual expr state break2))
+      ;Return something
+      ((eq? (firstElement expr) 'return) (break1 (stateReturn expr state break2)))
       ((eq? (firstElement expr) 'begin)   )
       ((eq? (firstElement expr) 'try)   )
       ((eq? (firstElement expr) 'catch)   )
@@ -232,11 +240,26 @@
     )))
 
 (define stateEvaluate
-  (lambda (expr state)
+  (lambda (expr state mainBreak)
     (call/cc
-     (lambda (break)
-       (stateEvaluate-helper expr state break)))))
+     (lambda (break2)
+       (stateEvaluate-helper expr state mainBreak break2)))))
 
+;Abstraction for handling var
+(define stateVar
+  (lambda (expr state break)
+    (cond
+      ((null? (restOf2 expr)) (addVar (secondElement expr) undefined state))
+      (else (addVar (secondElement expr) (thirdElement expr) state)))))
+
+;Abstraction for handling =
+(define stateEqual
+  (lambda (expr state break)
+    (cond
+      ((null? expr) (error emptyInputError))
+      ((null? state) (error invalidStateError))
+      (else (setVar (secondElement expr) (intEvaluate (thirdElement state) state) state)))))
+  
 (define stateWhile
   (lambda (expr state break)
     (if booleanEvaluate(
