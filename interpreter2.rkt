@@ -280,3 +280,23 @@
     (if (booleanEvaluate)
         'true
         'false)))
+
+;------------------------------------------------------------------------------------------
+;Flow control methods
+;------------------------------------------------------------------------------------------
+
+(define (m_for statement1 condition statement2 statement3 cstate break)
+  (if (booleanEvaluate condition (stateEvaluate statement1 cstate) break)
+      (m_for '() condition statement2 statement3 (stateEvaluate statement2 (stateEvaluate statement3 (stateEvaluate statement1 cstate))) break)
+      (stateEvaluate (statement1 cstate) break)))
+
+(define (m_if condition then else cstate)
+  (if (booleanEvaluate condition) (stateEvaluate then cstate)
+      (stateEvaluate else cstate)))
+
+;if condition is true then run statement and repeat
+(define (m_while condition statement cstate break return)
+  (if (booleanEvaluate condition) (m_while condition (stateEvaluate statement cstate) break)
+      cstate))
+
+;TODO add break return and continue
