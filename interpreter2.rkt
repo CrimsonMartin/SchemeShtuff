@@ -215,7 +215,7 @@
 ;M_state methods
 ;------------------------------------------------------------------------------------------
 (define stateEvaluate
-  (lambda (expr state mainBreak)
+  (lambda (expr state mainBreak subExprBreak)
     (cond
       ;Null check
       ((null? expr) (error emptyInputError))
@@ -226,7 +226,9 @@
       ;Return something
       ((eq? (firstElement expr) 'return) (mainBreak (stateReturn expr state)))
       ;Brackets
-      ((eq? (firstElement expr) 'begin) stateBracket)
+      ((eq? (firstElement expr) 'begin) (stateBegin expr state mainBreak))
+      ;Break
+      ((eq? (firstElement expr) 'break) (stateBreak state subExprBreak))
       
       ((eq? (firstElement expr) 'try)   )
       ((eq? (firstElement expr) 'catch)   )
@@ -266,6 +268,11 @@
   (lambda (expr state mainBreak)
     (read (secondElement expr) (addLayer state) mainBreak)))
 
+;Abstraction for handling break
+(define stateBreak
+  (lambda (state subExprBreak)
+    (subExprBreak state)))
+                
 (define stateWhile
   (lambda (expr state break)
     (if booleanEvaluate(
