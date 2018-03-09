@@ -28,6 +28,8 @@
 ;----------------------------------------------------------------------------
 (define initialstate '((()())))
 (define emptylayer '(()()))
+(define testlayer '( (t v g y s g thsi x) (1 2 3 4 5 6 7 8)))
+(define teststate '(((a b c d)(10 11 12 13)) ((t v g y s g thsi x) (1 2 3 4 5 6 7 8))))
 
 ;gets the variable name list from a state
 (define (vars layer) (car layer))
@@ -50,10 +52,9 @@
   (restof cstate))
 
 
-
 ;adds an empty layer to the input state
 (define (add_layer layer cstate)
-    (append (list layer) (list cstate)))
+    (append (list layer) cstate))
 
 ;returns the layer after we add the pair (x val) to the input layer
 ;throws error if the value is already used or declared
@@ -63,20 +64,21 @@
     (else (buildlayer (cons x (vars layer)) (cons val (vals layer))))))
 
 ;removes that var from the state, and the associated values with that label
-;doesn't assume that there is only one instance of the var, removes all of them
+;just removes the first one
 (define (removefrom_layer var layer)
   (cond
     ((null? (vars layer)) '())
     ((equal? var (firstelement (vars layer))) (removefrom_layer var (buildlayer (restof (vars layer)) (restof (vals layer)))))
     (else
      (appendto_layer (firstelement (vars layer)) (firstelement (vals layer)) (removefrom_layer var (buildlayer (restof (vars layer)) (restof (vals layer))))))))
-;helper for removefrom, not to be called by anything else since it doesn't check
+
+;helper for removefrom, not to be called by anything else since it doesn't check anything
 (define (appendto_layer x val layer)
   (cond
     ((null? layer) (buildlayer (list x) (list val)))
     (else (buildlayer (cons x (vars layer)) (cons val (vals layer))))))
 
-;returns the vals associated with the var in the given layer of the state
+;returns the val associated with the var in the given layer of the state
 ;if there isn't a val, then returns the empty list
 (define (layer_lookup variable layer)
   (cond
@@ -85,20 +87,30 @@
     (else (layer_lookup variable (buildlayer (restof (vars layer)) (restof (vals layer)))))))
 
 
+;returns the singular value associated with the input variable in the given state
 (define (m_state_lookup var state)
-    (if (null? state) '()
-    (if (null? (layer_lookup var (getTopLayer state))) (layer_lookup var (getTopLayer state))
-        (m_state_lookup var (getNextLayers (state))))))
+  (cond
+    ((null? state) '())
+    ((not (null? (layer_lookup var (getTopLayer state)))) (layer_lookup var (getTopLayer state)))
+    (else (m_state_lookup var (getNextLayers state)) )))
 
+;returns the state after adding this pair to the current top layer
 (define (m_state_add var val cstate)
-  (addto_layer var val (getTopLayer cstate)))
+  (add_layer (addto_layer var val (getTopLayer cstate)) (getNextLayers cstate)))
 
+;returns the state after removing the given variable from the state
+;assumes there's only one var in the state
 (define (m_state_remove var cstate)
-  (removefrom_layer var (getTopLayer cstate)))
+  (cond
+    ((null? cstate) '())
+    ((not (null? (layer_lookup var (getTopLayer cstate))));if this variable is in the top layer
+     (add_layer (removefrom_layer var (getTopLayer cstate)) (getNextLayers cstate)))
+    ;else it's not in the top layer
+    (else (add_layer (getTopLayer cstate) (m_state_remove var (getNextLayers cstate))))))
 
 ;------------------------------------------------------------------------------------------
 ;interpreter methods
-;--------------------------------------------------------------------------------------------
+;------------------------------------------------------------------------------------------
 
 ;public void main
 (define (interpret filepathandname)
@@ -113,7 +125,7 @@
 (define (declare var cstate) (m_state_add var 'declared cstate))
 
 ;checks that the value is already declared to something
-(define (equals var val cstate)
+(define (setvar var val cstate)
   (cond
     ;check that the value for the variable is 'declared or some number, ie it's already declared
     ((not (null? (m_state_lookup var cstate))) (m_state_add var val (m_state_remove var cstate)))
@@ -126,44 +138,43 @@
     ;if it's a unary operator (var x)
     ((null? (cddr input)) (declare (secondelement input) cstate))
     ;else it's a binary (var x 10)
-    (else (equals (secondelement input) (thirdelement input) (declare (secondelement input) cstate)))))
+    (else (setvar (secondelement input) (thirdelement input) (declare (secondelement input) cstate)))))
 
 
 (define (isVariable? var cstate)
   (if (not (null? (m_state_lookup var cstate))) #t
       #f))
-
+#|
 ;reads whatever the unput is and sends to the helper methods depending on what is needed
 (define (read input cstate)
   (cond
     ((null?  input) cstate)
+    ;assignment call m_state and read (restof input)
 
-    ((equal? 'for (firstelement input)) (m_for
-    ;check assignment
-    ;intexpression
-    ;boolexpression
-    ;flow control expression
+    ((equal? 'for (firstelement input)) (m_for))
+     ;check if
+     ;check while
+    ;check try
+    ;check break
+                                        
     
     
-    ;test for unary operators
-
-    ;test for binary operators
     ;(operator <input1> <input2>)
     ;if it needs to call evaluate or needs to call mstate
     
     (else (read (cdr input) (m_state (car input) cstate)))))
 
 
-(define (m_state expression cstate)
+(define (m_state expression cstate return)
   (cond
-    
     ((equal? 'var (firstelement expression)) (declarevariable expression cstate))
     ;if we see return need to break
-    ((equal? 'return (firstelement expression)) (return evaluate (restof expression) cstate))
+    ((equal? 'return (firstelement expression)) (return (evaluate (restof expression) cstate)))
 
-    
-    ;if the first statement is (var ....)
-    ;if the first statement is (return ...)
+    ;test for unary operators
+
+    ((null? (cddr expression)
+    ;test for binary operators
     
     (else (read (restof expression) (m_state (firstelement expression) cstate))))
 
@@ -187,19 +198,19 @@
 ;if (booleanevaluate) 'true' else 'false'
 (define (booleanevaluate expression cstate return)
   (cond
-    ((number? expression) (return expression)
-    ((boolean? expression) (return expression)
+    ((number? expression) (return expression))
+    ((boolean? expression) (return expression))
     ((ismember? expression '(true false)) (return expression))
     ((isVariable? expression) (return (m_state_lookup expression cstate)))
     ((equal? '< (firstelement  expression))
-     (< (lambda (v) (m_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
+     (< (lambda (v) (m_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate))))
     ((equal? '> (firstelement  expression))
      (> (m_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
     ((equal? '&& (firstelement expression))
      (and (m_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
     ((equal? '|| (firstelement expression))
      (or (booleanm_evaluate (secondelement expression) cstate) (m_evaluate (thirdelement expression) cstate)))
-    (else (undefinederror))))
+    (else (undefinederror) ))))
 
 
 (define (intevaluate expression cstate)
@@ -250,8 +261,8 @@
   (if (booleanevaluate condition) (m_state then cstate)
       (m_state else cstate)))
 
-(define (m_while condition statement cstate)
-  (if (booleanevaluate condition) (m_while condition (m_state statement cstate))
+(define (m_while condition statement cstate break return)
+  (if (booleanevaluate condition) (m_while condition (m_state statement cstate) break)
       cstate))
 
 ;on open bracket, add a new layer to the state
@@ -263,10 +274,8 @@
   (getNextLayers cstate))
 
 (define (m_try statement catchstatement cstate break)
-  ())
+  (m_state statement))
 
 
 
-
-;TODO remove this
-(define testlayer '((t v g y s g thsi x) (1 2 3 4 5 6 7 8)))
+|#
