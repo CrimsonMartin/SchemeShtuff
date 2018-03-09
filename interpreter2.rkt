@@ -17,10 +17,10 @@
 ; Abstraction for errors
 ;----------------------------------------------------------------------------
 
-(define (reassignError) "error- reassigning")
-(define (declaringError) "error- using a variable before declaring")
-(define (assigningError) "error- using a variable before assigning")
-(define (undefinedError) "Undefined Operator")
+(define reassignError "error- reassigning")
+(define declaringError "error- using a variable before declaring")
+(define assigningError "error- using a variable before assigning")
+(define undefinedError "Undefined Operator")
 
 ;----------------------------------------------------------------------------
 ; Abstraction for predefined definitions
@@ -32,7 +32,7 @@
 (define emptyLayer '(()()))
 
 ;----------------------------------------------------------------------------
-; Abstraction for inputs
+; Abstraction for input-related helper functions
 ;----------------------------------------------------------------------------
 ;Abstraction for getting first element of input
 (define firstElement
@@ -70,26 +70,52 @@
 ;Abstraction for removing a layer
 (define removeLayer
   (lambda (state)
-    (cdr state)))
-
-;Abstraction for getting the top layer of state
-(define getLayer
-  (lambda (state)
-    (car state)))
+    (restOf state)))
 
 ;----------------------------------------------------------------------------
 ; Abstraction for layer manipulation helper functions
 ;----------------------------------------------------------------------------
+;Abstraction for getting the top layer of state
+(define getLayer
+  (lambda (state)
+    (firstElement state)))
+
+;Abstraction for removing first variable and value from a layer
+(define removeFirstVarPair
+  (lambda (layer)
+    (cons (restOf (getLayerVar layer)) (cons (restOf (getLayerVal layer)) '()))))
+
+;----------------------------------------------------------------------------
+; Abstraction for variables-related helper functions
+;----------------------------------------------------------------------------
 ;Abstraction for getting variable list from layer
 (define getLayerVar
   (lambda (layer)
-    (car layer)))
+    (firstElement layer)))
 
+;Add a variable to first layer of state
+(define addVar
+  (lambda (var state)
+    (cons (cons (cons var (getLayerVar(getLayer state)))
+                (cons (cons 'UNDEF (getLayerVal (getLayer state))) '()))
+          (removeLayer state))))
+
+;----------------------------------------------------------------------------
+; Abstraction for variable-values-related helper functions
+;----------------------------------------------------------------------------
 ;Abstraction for getting value list from layer
 (define getLayerVal
   (lambda (layer)
-    (cadr layer)))
+    (secondElement layer)))
 
-
-
+;Return the value of the first occurence of a variable (x) from state
+;Throws error if variable doesn't exist, or if value does not exist
+(define getXVal
+  (lambda (x state)
+    (cond
+      ((null? state) (error declaringError))
+      ((or (null? (getLayerVar (getLayer state))) (null? (getLayer state))) (getXVal x (restOf state)))
+      ;((null? (getLayerVal (getLayer state))) (error assigningError)); Unnecessary
+      ((eq? x (firstElement (getLayerVar (getLayer state)))) (firstElement (getLayerVal (getLayer state))))
+      (else (getXVal x (cons (removeFirstVarPair (getLayer state)) (removeLayer state)))))))
 
