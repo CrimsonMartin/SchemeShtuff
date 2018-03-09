@@ -33,6 +33,15 @@
 ;Abstraction for empty layer
 (define emptyLayer '(()()))
 
+
+;----------------------------------------------------------------------------
+; Abstraction for miscellaneous helper functions
+;----------------------------------------------------------------------------
+;Put input into an empty
+(define addToEmptyList
+  (lambda (n)
+    (cons n '())))
+
 ;----------------------------------------------------------------------------
 ; Abstraction for input-related helper functions
 ;----------------------------------------------------------------------------
@@ -90,7 +99,7 @@
 ;Abstraction for removing first variable and value from a layer
 (define removeFirstVarPair
   (lambda (layer)
-    (cons (restOf (getLayerVar layer)) (cons (restOf (getLayerVal layer)) '()))))
+    (cons (restOf (getLayerVar layer)) (addToEmptyList (restOf (getLayerVal layer))))))
 
 ;----------------------------------------------------------------------------
 ; Abstraction for variables-related helper functions
@@ -104,8 +113,29 @@
 (define addVar
   (lambda (var state)
     (cons (cons (cons var (getLayerVar(getLayer state)))
-                (cons (cons 'UNDEF (getLayerVal (getLayer state))) '()))
+                (addToEmptyList (cons 'UNDEF (getLayerVal (getLayer state)))))
           (removeLayer state))))
+
+;Set a variable's assigned value to val
+(define setVar-cps
+  (lambda (var val state return)
+    (cond
+      ((null? state) (return (error declaringError)))
+      ((or (null? (getLayerVar (getLayer state))) (null? (getLayer state)))
+       (setVar-cps var val (restOf state) (lambda (newState) (return (cons (firstElement state) newState)))))
+      ((eq? var (firstElement (getLayerVar (getLayer state))))
+       (cons (cons (getLayerVar (getLayer state)) (addToEmptyList (cons val (restOf (getLayerVal (getLayer state)))))) (restOf state)))
+      (else
+       (setVar-cps var val (cons (removeFirstVarPair (getLayer state)) (restOf state))
+                   (lambda (newState) (return (cons (cons (cons (firstElement (getLayerVar (getLayer state))) (getLayerVar (getLayer newState)))
+                                                    (addToEmptyList (cons (firstElement (getLayerVal (getLayer state))) (getLayerVal (getLayer newState))))) (restOf state)))))))))
+
+(define setVar
+  (lambda (var val state)
+    (setVar-cps var val state (lambda (v) v))))
+
+;Test template: (setVar 'a '2 '(((a b c) (1 2 3)) ((d e f) (4 5 6))))
+
 
 ;----------------------------------------------------------------------------
 ; Abstraction for variable-values-related helper functions
@@ -169,17 +199,24 @@
 ;------------------------------------------------------------------------------------------
 ;M_state methods
 ;------------------------------------------------------------------------------------------
-(define stateEvaluate
-  (lambda (expr state return)
+(define stateEvaluate-helper
+  (lambda (expr state break)
     (cond
       ;Null check
-      ((null? expr) return (error emptyInputError))
+      ((null? expr) (error emptyInputError))
       ;Declare var
       ((eq? (car expr) 'var) (cond
                                     ((null? (restOf2 expr)) (addVar (secondElement expr) state))
                                     ;(else (setStateVar (secondElement expr) (M_value (3rdInput expr) (declareVar (2ndInput statement) state)) (declareVar (2ndInput statement) state)))))
       )))
     ))
+
+(define stateEvaluate
+  (lambda (expr state)
+    (call/cc
+     (lambda (break)
+       (stateEvaluate-helper expr state break)))))
+    
 ;------------------------------------------------------------------------------------------
 ;M_value methods
 ;------------------------------------------------------------------------------------------
@@ -222,14 +259,22 @@
       ;Null check
       ((null? expr) (error emptyInputError))
       ((null? state) (error invalidStateError))
+      ;==
       ((eq? (firstElement expr) '==) (eq? (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ;!=
       ((eq? (firstElement expr) '!=) (not (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ;<
       ((eq? (firstElement expr) '<) (< (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ;>
       ((eq? (firstElement expr) '>) (> (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ;<=
       ((eq? (firstElement expr) '<=) (<= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ;>=
       ((eq? (firstElement expr) '>=) (>= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
-      (else (error 'M_boolean "Passed in a wrong expression")))))
+      ;Unrecognized operator
+      (else (error 'undefinedError)))))
 
+;Turn #t/#f to 'true/'false
 (define booleanEvaluate
   (lambda (expression state)
     (if (booleanEvaluate)
