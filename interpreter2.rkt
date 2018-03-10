@@ -116,6 +116,11 @@
   (lambda (layer)
     (firstElement layer)))
 
+;Abstraction for getting 1st variable list from state
+(define getStateVar
+  (lambda (state)
+    (getLayerVar (getLayer state))))
+
 ;Add a variable and its value to first layer of state
 (define addVar
   (lambda (var val state)
@@ -130,18 +135,24 @@
       ((null? state) (return (error declaringError)))
       ((or (null? (getLayerVar (getLayer state))) (null? (getLayer state)))
        (setVar-cps var val (restOf state) (lambda (newState) (return (cons (firstElement state) newState)))))
+      ;Replace value
       ((eq? var (firstElement (getLayerVar (getLayer state))))
-       (cons (cons (getLayerVar (getLayer state)) (addToEmptyList (cons val (restOf (getLayerVal (getLayer state)))))) (restOf state)))
+       (return (cons (cons (getLayerVar (getLayer state)) (addToEmptyList (cons val (restOf (getLayerVal (getLayer state)))))) (restOf state))))
+      ;Look at next element
       (else
        (setVar-cps var val (cons (removeFirstVarPair (getLayer state)) (restOf state))
-                   (lambda (newState) (return (cons (cons (cons (firstElement (getLayerVar (getLayer state))) (getLayerVar (getLayer newState)))
-                                                    (addToEmptyList (cons (firstElement (getLayerVal (getLayer state))) (getLayerVal (getLayer newState))))) (restOf state)))))))))
+                   (lambda (newState) (return (cons (cons (cons (firstElement (getLayerVar (getLayer state)))
+                                                                (getLayerVar (getLayer newState)))
+                                                          (addToEmptyList (cons (firstElement (getLayerVal (getLayer state))) (getLayerVal (getLayer newState)))))
+                                                    (restOf newState)))))))))
 
+                     
 (define setVar
   (lambda (var val state)
     (setVar-cps var val state (lambda (v) v))))
-
+                     
 ;Test template: (setVar 'a '2 '(((a b c) (1 2 3)) ((d e f) (4 5 6))))
+
 
 
 ;----------------------------------------------------------------------------
@@ -151,6 +162,11 @@
 (define getLayerVal
   (lambda (layer)
     (secondElement layer)))
+                     
+;Abstraction for getting 1st value list from state
+(define getStateVal
+  (lambda (state)
+    (getLayerVal (getLayer state))))
 
 ;Return the value of the first occurence of a variable (x) in state
 ;Throws error if variable doesn't exist, or if value does not exist
@@ -186,11 +202,11 @@
 ;Read
 ;Denotes expression and assign expressions to further functions
 (define read-cps
-  (lambda (expr state return mainBreak subExprBreak)
+  (lambda (expr state mainBreak subExprBreak return)
     (cond
       ((null? expr) return (subExprBreak (removeLayer state)))
       ((null? state) return (error invalidStateError))
-      ((list? firstElement expr) (read-cps (car expr) state (lambda (newState) (return (read-cps newState return))) mainBreak))
+      ((list? (firstElement expr)) (read-cps (firstElement expr) state mainBreak subExprBreak (lambda (newState) (return (read-cps (restOf expr) newState mainBreak subExprBreak return)))))
       ((isMember? (firstElement expr) '(< > <= >= == != && ||)) (return (booleanEvaluate expr state)))
       ((isMember? (firstElement expr) '(+ - * / %))  (return (intEvaluate expr state)))
       ((isMember? (firstElement expr)
@@ -201,8 +217,8 @@
 (define read
   (lambda (expr state mainBreak)
     (call/cc
-     (lambda (subExpressionBreak
-              (read-cps (expr state (lambda (v) v) mainBreak subExpressionBreak)))))))
+     (lambda (subExpressionBreak)
+              (read-cps expr state mainBreak subExpressionBreak (lambda (v) v))))))
 
 ;helper for the read method, to determine which helper method to call
 (define (isMember? a lis)
@@ -229,26 +245,25 @@
       ((eq? (firstElement expr) 'begin) (stateBegin expr state mainBreak))
       ;Break
       ((eq? (firstElement expr) 'break) (stateBreak state subExprBreak))
-      
-      ((eq? (firstElement expr) 'try)   )
-      ((eq? (firstElement expr) 'catch)   )
-      ((eq? (firstElement expr) 'finally)   )
-      ((eq? (firstElement expr) 'continue)   )
-      ;flow control
-      ((eq? (firstElement expr) 'if) (m_if (secondElement expr) thenexpr elseexpr state break))
-      ((eq? (firstElement expr) 'while) (m_while (secondElement expr) body state break))
-      ((eq? (firstElement expr) 'for) (m_for statement1 condition statement2 statement3 state break))
-      ;break continuation
-      ((eq? (firstElement expr) 'return) (break (evaluate (restOf expr)) ))
-
-    )))
+      ;If
+      ((eq? (firstElement expr) 'if) (stateIf (restOf expr) state mainBreak))
+      ;While
+      ((eq? (firstElement expr) 'while) (stateWhile (secondElement expr) (thirdElement expr) state mainBreak)
+      ;((eq? (firstElement expr) 'try)   )
+      ;((eq? (firstElement expr) 'catch)   )
+      ;((eq? (firstElement expr) 'finally)   )
+      ;((eq? (firstElement expr) 'continue)   )
+      ;((eq? (firstElement expr) 'if) (m_if (secondElement expr) thenexpr elseexpr state break))
+      ;((eq? (firstElement expr) 'while) (m_while (secondElement expr) body state break))
+      ;((eq? (firstElement expr) 'for) (m_for statement1 condition statement2 statement3 state break))
+    ))))
 
 ;Abstraction for handling var
 (define stateVar
   (lambda (expr state)
     (cond
       ((null? (restOf2 expr)) (addVar (secondElement expr) undefined state))
-      (else (addVar (secondElement expr) (thirdElement expr) state)))))
+      (else (addVar (secondElement expr) (intEvaluate (thirdElement expr) state) state)))))
 
 ;Abstraction for handling =
 (define stateEqual
@@ -256,7 +271,7 @@
     (cond
       ((null? expr) (error emptyInputError))
       ((null? state) (error invalidStateError))
-      (else (setVar (secondElement expr) (intEvaluate (thirdElement state) state) state)))))
+      (else (setVar (secondElement expr) (intEvaluate (thirdElement expr) state) state)))))
 
 ;Abstraction for handling return
 (define stateReturn
@@ -266,24 +281,40 @@
 ;Abstraction for handling begin (brackets)
 (define stateBegin
   (lambda (expr state mainBreak)
-    (read (secondElement expr) (addLayer state) mainBreak)))
+    (read (restOf expr) (addNewLayer state) mainBreak)))
 
 ;Abstraction for handling break
 (define stateBreak
   (lambda (state subExprBreak)
     (subExprBreak state)))
-                
-(define stateWhile
-  (lambda (expr state break)
-    (if booleanEvaluate(
+
+;Abstraction for handling if
+(define stateIf
+  (lambda (expr state mainBreak)
+    (if (isTrue? (booleanEvaluate (firstElement expr) state))
+        (read (secondElement expr) state mainBreak)
+        (if (not (null? (restOf2 expr)))
+            (read (thirdElement expr) state mainBreak)
+            state))))
+
+;Abstraction for handling while
+(define stateWhile;-cps
+  (lambda (condition body state mainBreak)
+    (if (isTrue? (booleanEvaluate condition state))
+        (stateWhile condition body (read body state mainBreak) mainBreak)
+        state)))
+
+;(define stateWhile
+ ; (lambda (condition body state mainBreak)
+  ;  (stateWhile-cps condition body state mainBreak))
 
 (define (m_if condition then else cstate)
   (if (booleanEvaluate condition) (stateEvaluate then cstate)
       (stateEvaluate else cstate)))
 
 ;if condition is true then run statement and repeat
-(define (m_while condition statement cstate break return)
-  (if (booleanEvaluate condition) (m_while condition (stateEvaluate statement cstate) break)
+;(define (m_while condition statement cstate break return)
+  ;(if (booleanEvaluate condition) (m_while condition (stateEvaluate statement cstate) break)))
 
 ;------------------------------------------------------------------------------------------
 ;M_value methods
@@ -329,22 +360,42 @@
       ((null? state) (error invalidStateError))
       ;==
       ((eq? (firstElement expr) '==) (eq? (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+
       ;!=
-      ((eq? (firstElement expr) '!=) (not (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      ((eq? (firstElement expr) '!=) (not (eq? (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state))))
+
       ;<
       ((eq? (firstElement expr) '<) (< (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+
       ;>
       ((eq? (firstElement expr) '>) (> (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+
       ;<=
       ((eq? (firstElement expr) '<=) (<= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+
       ;>=
       ((eq? (firstElement expr) '>=) (>= (intEvaluate (secondElement expr) state) (intEvaluate (thirdElement expr) state)))
+      
+      ;||
+      ((eq? (firstElement expr) '||) (or (isTrue? (booleanEvaluate (secondElement expr) state)) (isTrue? (booleanEvaluate (thirdElement expr) state))))
+      
+      ;||
+      ((eq? (firstElement expr) '&&) (and (isTrue? (booleanEvaluate (secondElement expr) state)) (isTrue? (booleanEvaluate (thirdElement expr) state))))
+
+      ;!
+      ((eq? (firstElement expr) '!) (not (isTrue? (booleanEvaluate (secondElement expr) state))))
+      
       ;Unrecognized operator
       (else (error 'undefinedError)))))
 
 ;Turn #t/#f to 'true/'false
 (define booleanEvaluate
-  (lambda (expression state)
-    (if (booleanEvaluate)
+  (lambda (expr state)
+    (if (booleanEvaluate-helper expr state)
         'true
         'false)))
+
+;Evaluate 'true and 'false like #t and #f
+(define isTrue?
+  (lambda (b)
+    (eq? b 'true)))
