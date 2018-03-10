@@ -220,6 +220,11 @@
      (lambda (subExpressionBreak)
               (read-cps expr state mainBreak subExpressionBreak (lambda (v) v))))))
 
+;read function with customizable break function
+(define cRead
+  (lambda (expr state mainBreak cBreak)
+    (read-cps expr state mainBreak cBreak (lambda (v) v))))
+
 ;helper for the read method, to determine which helper method to call
 (define (isMember? a lis)
   (cond
@@ -235,28 +240,39 @@
     (cond
       ;Null check
       ((null? expr) (error emptyInputError))
+
       ;Declare var
       ((eq? (firstElement expr) 'var) (stateVar expr state))
+
       ;set the value of a var
       ((eq? (firstElement expr) '=) (stateEqual expr state))
+
       ;Return something
       ((eq? (firstElement expr) 'return) (mainBreak (stateReturn expr state)))
+
       ;Brackets
       ((eq? (firstElement expr) 'begin) (stateBegin expr state mainBreak))
+
       ;Break
       ((eq? (firstElement expr) 'break) (stateBreak state subExprBreak))
+
       ;If
       ((eq? (firstElement expr) 'if) (stateIf (restOf expr) state mainBreak))
+
       ;While
-      ((eq? (firstElement expr) 'while) (stateWhile (secondElement expr) (thirdElement expr) state mainBreak)
-      ;((eq? (firstElement expr) 'try)   )
-      ;((eq? (firstElement expr) 'catch)   )
-      ;((eq? (firstElement expr) 'finally)   )
-      ;((eq? (firstElement expr) 'continue)   )
-      ;((eq? (firstElement expr) 'if) (m_if (secondElement expr) thenexpr elseexpr state break))
-      ;((eq? (firstElement expr) 'while) (m_while (secondElement expr) body state break))
-      ;((eq? (firstElement expr) 'for) (m_for statement1 condition statement2 statement3 state break))
-    ))))
+      ((eq? (firstElement expr) 'while)
+       (call/cc
+        (lambda (whileBreak)
+          (stateWhile (secondElement expr) (thirdElement expr) state mainBreak whileBreak))))
+
+      ;Continue
+      ((eq? (firstElement expr) 'continue) (stateContinue state subExprBreak))
+
+      ;Try
+      ((eq? (firstElement expr) 'try) (stateTry state mainBreak))
+
+      
+    )))
 
 ;Abstraction for handling var
 (define stateVar
@@ -283,10 +299,10 @@
   (lambda (expr state mainBreak)
     (read (restOf expr) (addNewLayer state) mainBreak)))
 
-;Abstraction for handling break
+;Abstraction for handling break *** Something is wrong with this
 (define stateBreak
   (lambda (state subExprBreak)
-    (subExprBreak state)))
+    (subExprBreak (removeLayer state))))
 
 ;Abstraction for handling if
 (define stateIf
@@ -299,22 +315,30 @@
 
 ;Abstraction for handling while
 (define stateWhile;-cps
-  (lambda (condition body state mainBreak)
+  (lambda (condition body state mainBreak whileBreak)
     (if (isTrue? (booleanEvaluate condition state))
-        (stateWhile condition body (read body state mainBreak) mainBreak)
+        (stateWhile condition body (cRead body state mainBreak whileBreak) mainBreak whileBreak)
         state)))
 
 ;(define stateWhile
- ; (lambda (condition body state mainBreak)
-  ;  (stateWhile-cps condition body state mainBreak))
+  ;(lambda (condition body state mainBreak)
+  ;  (call/cc
+ ;    (lambda (whileBreak)
+;       (stateWhile-cps condition body state mainBreak whileBreak)))))
 
-(define (m_if condition then else cstate)
-  (if (booleanEvaluate condition) (stateEvaluate then cstate)
-      (stateEvaluate else cstate)))
+;Abstraction for handling continue
+(define stateContinue
+  (lambda (state subExprBreak)
+    (subExprBreak state)))
+    
+;Abstraction for handling try
+(define stateTry
+  (lambda (expr state mainBreak)
+    (call/cc
+     (lambda (tryBreak)
+       (cRead (restOf expr) state mainBreak tryBreak)))))
 
-;if condition is true then run statement and repeat
-;(define (m_while condition statement cstate break return)
-  ;(if (booleanEvaluate condition) (m_while condition (stateEvaluate statement cstate) break)))
+;Abstraction for handling
 
 ;------------------------------------------------------------------------------------------
 ;M_value methods
