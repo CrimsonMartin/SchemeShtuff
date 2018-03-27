@@ -1,4 +1,4 @@
-#Interpreter
+## Interpreter
 
 This is the project for EECS 345, which is creating an interpreter in scheme for a Java/C-ish language.
 
