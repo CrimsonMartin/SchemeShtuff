@@ -1,10 +1,13 @@
-; If you are using racket instead of scheme, uncomment these two lines, comment the (load "simpleParser.scm") and uncomment the (require "simpleParser.scm")
-; #lang racket
-; (require "simpleParser.scm")
-(load "simpleParser.scm")
+;Authors:
+;Michael Folz maf152
+;Mark Gross mag210
+
+;Based on the given solution interpreter2-callcc-no-boxes.scm
+
+(load "functionParser.scm")
 
 
-; An interpreter for the simple language that uses call/cc for the continuations.  Does not handle side effects.
+; An interpreter for the c-ish language that uses call/cc for the continuations.  Does not handle side effects.
 (define call/cc call-with-current-continuation)
 
 
