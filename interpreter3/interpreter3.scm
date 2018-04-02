@@ -9,9 +9,9 @@
 
 
 
-;TODO delete these
+;TODO delete these        ( () () )
 (define test-environment '((global () () ((a b c d x) (1 2 3 4 5)))))
-(define test2 '((factorial ()()((m n o p) (9 8 7 6)))  (global () () ((a b c d x) (1 2 3 4 5)))))
+(define test2 '((factorial ()()((m n o p) (9 8 7 6))) (global () () ((a b c d x) (1 2 3 4 5)))))
 
 
 
@@ -25,30 +25,35 @@
     (scheme->language
      (call/cc
       (lambda (return)
-        (interpret-statement-list (interpret-functions (parser file) (newenvironment)) return
+        (interpret-statement-list (interpret-functions (parser file) (new-environment) (new-bindings)) return; TODO change to eval-main as last step
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown")))))))
 
 ; reads through the methods and binds all the functions and their closures in the state
-; returns the resulting state, calls on a new environment
-(define (interpret-functions input environment)
+; keeps a running total of the active bindings, and uses them for the function closures
+; returns the resulting state
+; the environment from each step is used by the next one
+(define (interpret-functions input environment current-bindings)
   (cond
-    ((null? input) (newenvironment))
-    ((eq? 'var (statement-type statement)) (interpret-bind-global-variable (get-firstelement input)))
-    ((equal? 'function (statement-type statement)) (interpret-bind-function ))
-    (else interpret-functions (cdr input) environment))) ;TODO this isn't done
+    ((null? input) environment)
+    ((eq? 'var (statement-type input)) ;bind global variable
+    ((equal? 'function (statement-type input)) ;function decleration
+      ;return an environment with the function bound- cdr input is everything but 'function
+      (interpret-bind-function (cdr input) environment current-bindings)
+    (else interpret-functions (cdr input) (interpret-funcitons (car input) environment current-bindings))))
 
+(define (interpret-bind-funciton function-statement state current-bindings)
+  (interpret-bind-function-parts (function-name function) (function-parameters function) (function-body function) )
 
+; stores the closure of the function in the current state
+; returns the updated state
+(define (interpret-bind-function-parts fName paramList fBody current-bindings cstate)
+    (append (list fName paramList fBody current-bindings cstate))
 
-
-
-
-
-
-
-
-
-
+; state already has main declared in body
+; evaluates for the return value of main function
+(define (eval-main state return break continue throw)
+  (interpret-statement-list (function-body (get-function 'main state)) state return break continue throw))
 
 
 
@@ -73,8 +78,12 @@
       ((eq? 'begin (statement-type statement)) (interpret-block statement environment return break continue throw))
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
-      ((eq? 'funcall (statement-type statement)) 1);TODO funcall)
+      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment return break comtinue throw))
       (else (myerror "Unknown statement:" (statement-type statement))))))
+
+(define (interpret-funcall statement environment return break continue throw)
+  (;TODO does the stuff from the notes
+    ))
 
 ; Calls the return continuation with the given expression value
 (define interpret-return
@@ -272,24 +281,26 @@
 ; abstractions for the dealing with closures
 (define (function-name closure)
   (car closure))
-(define (function-parameters closure)
+(define (function-parent closure)
   (cadr closure))
-(define (function-body closure)
+(define (function-parameters closure)
   (caddr closure))
-(define (function-bindings closure)
+(define (function-body closure)
   (cadddr closure))
+(define (function-bindings closure)
+  (car (cddr (cddr closure))))
 
 (define (variables frame)
   (car frame))
 (define (vals frame)
   (cadr frame))
 
-(define (new-frame)
+(define (new-bindings)
   '(()()))
 
 ; creates a new function frame
 (define (new-function-frame fname)
-  (list fname '() '() (new-frame)))
+  (list fname 'global-parent () '() (new-bindings)))
 
 ; create a new empty environment
 (define (new-environment)
@@ -327,21 +338,20 @@
     (remaining-frames environment))
 
 ; does a variable exist in the environment?
-; checks in the fname frame first, then global vbls
+; checks in the fname frame first, then parent up the parent function list
 (define (exists? var fname environment)
     (cond
       ((null? environment) #f)
+      ((equal? 'global-parent (function-parent (get-funciton fname environment))) #f)
       ((exists-in-frame? var (get-function fname environment)) #t)
-      ;we don't want to recurse on the next function since it's static scoping- go straight to global variables
-      ;TODO if we have scoping problems check here
-      (else (exists-in-frame? var (get-global-closure environment)))))
+      (else (exists? var ((get-funciton (function-parent (get-funciton fname)) environment)) environment))))
 
 ;is the var defined in a function frame
 (define (exists-in-frame? var frame)
   (exists-in-list? var (variables (function-bindings frame))))
 
 ; Looks up a value in the environment.  If the value is a boolean, it converts our languages boolean type to a Scheme boolean type
-; first it looks in the given function frame, then looks in the global variables
+; first it looks in the given function frame, then in the parents up the parent tree to global
 ; Returns an error if the variable does not have a legal value
 (define (lookup var fname environment)
     (if (not (exists? var fname environment))
@@ -352,7 +362,8 @@
 (define (lookup-in-env var fname environment)
   (if (exists-in-frame? var (get-function fname environment))
       (lookup-in-frame var (get-function fname environment))
-      (lookup-in-frame var (get-global-closure environment))));TODO if we need to change the scoping somehow, here is where we change it
+      (lookup-in-frame var (get-global-closure environment))))
+      ;TODO if we need to change the scoping somehow, here is where we change it
 
 ; Return the value bound to a variable in the frame
 (define (lookup-in-frame var frame)
@@ -397,7 +408,7 @@
 
 ; helper for insert to reconstruct the state after insertion
 (define (replace-bindings frame newbindings)
-  (list (function-name frame) (function-parameters frame) (function-body frame) newbindings))
+  (list (function-name frame) (function-parent frame) (function-parameters frame) (function-body frame) newbindings))
 
 ;helper for insert to reconstruct the state after insertion
 (define (replace-function old-function-name new-frame state)
@@ -409,19 +420,13 @@
 ; adds the list of bindings to the given funciton in the state
 ; binding list is ((vars)(vals))
 ; returns the overall state
-(define (add-binding-list newbindings fname state)
+(define (insert-binding-list newbindings fname state)
   (cond
     ((null? newbindings) state)
-    (else add-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) fname
+    (else insert-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) fname
       (insert (car (variables newbindings)) (car (vals newbindings)) fname state))))
 
 
-
-
-
-; stores the closure of the function in the current state, and adds it to the top of the environment
-(define (interpret-bind-function fName paramList fBody environment cstate)
-  (append (list fName paramList fBody (get-current-bindings environment)) cstate))
 
 ;global is the function name in the last frame of the state, so same as getting the function 'global
 (define (get-global-closure state)
@@ -438,8 +443,6 @@
 
 
 
-
-
 ; returns the function environment, with variables evaluated in the state
 ; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
 (define (add-bindings formal-params actual-params function-environment state)
@@ -447,6 +450,8 @@
       (myerror "parameter mismatch : formal parameters should be " formal-params)
       (add-param-bindings formal-params actual-params function-environment state)))
 
+
+;
 (define (add-param-bindings f-params a-params environment state)
   (cond
     ((null? f-params) '())
@@ -464,18 +469,6 @@
 (define (is-compatible? x y state)
     ;TODO not sure if we need to check for compatibility?
     #t)
-
-
-
-; all the variable bindings that are active right now
-; (function1 closure) (function2 closure) ... (global variables))
-; returns: ({(vars for function 1)(vals for funciton 1)} {(vars for function2) (f2 vals)}  ... )
-; it needs to be this so that we can have "private" variables that are specific to functions
-(define (get-current-bindings environment)
-  (cond
-    ((null? environment) '())
-    (else 1)));TODO how to get all the current bindings depends on how we store them in the state
-      ;how do we structure saving the environment?
 
 
 
