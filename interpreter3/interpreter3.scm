@@ -11,7 +11,7 @@
 
 ;TODO delete these        ( () () )
 (define test-environment '((global () () ((a b c d x) (1 2 3 4 5)))))
-(define test2 '((factorial ()()((m n o p) (9 8 7 6))) (global () () ((a b c d x) (1 2 3 4 5)))))
+(define test2 '((factorial global (p1)(hotbody1)((m n o p) (9 8 7 6))) (global global-parent (p2) (hotbody2) ((a b c d x) (1 2 3 4 5)))))
 
 
 
@@ -36,24 +36,29 @@
 (define (interpret-functions input environment current-bindings)
   (cond
     ((null? input) environment)
-    ((eq? 'var (statement-type input)) ;bind global variable
+    ((eq? 'var (statement-type input)) 2) ;bind global variable
     ((equal? 'function (statement-type input)) ;function decleration
       ;return an environment with the function bound- cdr input is everything but 'function
-      (interpret-bind-function (cdr input) environment current-bindings)
-    (else interpret-functions (cdr input) (interpret-funcitons (car input) environment current-bindings))))
+      (interpret-bind-function (cdr input) environment current-bindings))
+    (else interpret-functions (cdr input) (interpret-functions (car input) environment current-bindings))))
 
-(define (interpret-bind-funciton function-statement state current-bindings)
-  (interpret-bind-function-parts (function-name function) (function-parameters function) (function-body function) )
+(define (interpret-bind-function function-statement state current-bindings)
+  (interpret-bind-function-parts (function-name function) (function-parameters function) (function-body function) ))
 
 ; stores the closure of the function in the current state
 ; returns the updated state
+;TODO change this to insert for error-checking
 (define (interpret-bind-function-parts fName paramList fBody current-bindings cstate)
-    (append (list fName paramList fBody current-bindings cstate))
+    (append (list fName paramList fBody current-bindings cstate)))
 
 ; state already has main declared in body
 ; evaluates for the return value of main function
+; TODO check that it's the right return continuation- need to be new for each function call? but main is the total function
 (define (eval-main state return break continue throw)
   (interpret-statement-list (function-body (get-function 'main state)) state return break continue throw))
+
+
+
 
 
 
@@ -67,10 +72,10 @@
 
 
 ;
-(define (add-param-bindings f-params a-params environment state)
-  (cond
-    ((null? f-params) '())
-    (else (add-param-bindings (cdr f-params) (cdr a-params)(insert (get-firstelement f-param) (eval-expression (get-firstelement a-params) state) environment) state))))
+;(define (add-param-bindings f-params a-params environment state)
+;  (lookup-list  )
+
+;add-param-bindings (insert (get-firstelement f-param) (eval-expression (get-firstelement a-params) state) environment) state))))
 
 
 
@@ -97,11 +102,11 @@
       ((eq? 'begin (statement-type statement)) (interpret-block statement environment return break continue throw))
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
-      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment return break comtinue throw))
+      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement environment return break comtinue throw));TODO this needs to be a new return continuation I think
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 (define (interpret-funcall statement environment return break continue throw)
-  (;TODO does the stuff from the notes
+  (3;TODO does the stuff from the notes
     ))
 
 ; Calls the return continuation with the given expression value
@@ -319,9 +324,9 @@
 
 ; creates a new function frame
 (define (new-function-frame fname)
-  (list fname 'global-parent () '() (new-bindings)))
+  (list fname 'global-parent '() '() (new-bindings)))
 
-; create a new empty environment
+; create a new empty environment, with function name 'global
 (define (new-environment)
   (list (new-function-frame 'global)))
 
@@ -353,28 +358,32 @@
     (cons (new-function-frame name) environment))
 
 ; remove a frame from the environment
-(define (pop-function-frame environment) ;TODO replace pop-frame/pop-function-frame with update-function-params
+(define (pop-function-frame environment)
     (remaining-frames environment))
 
-; does a variable exist in the environment?
+; does a variable exist in the environment?(begin (if (null? input)
 ; checks in the fname frame first, then parent up the parent function list
 (define (exists? var fname environment)
     (cond
-      ;if we're on global (base) funciton frame, return if it's a global vbl or not
-      ((equal? 'global (funciton-name (get-function fname))) (exists-in-frame? var (get-function 'global)))
-      ;else recurse on the parent funciton frame
-      (else (exists? var ((get-funciton (function-parent (get-funciton fname)) environment)) environment))))
+      ;if we're on global (base) function frame, return if it's a global vbl or not
+      ((equal? 'global (function-name (get-function fname environment))) (exists-in-frame? var (get-function 'global environment)))
+      ((exists-in-frame? var (get-function fname environment)) #t)
+      ;else recurse on the parent function frame
+      (else (exists? var (function-parent (get-function fname environment)) environment))))
 
 ;is the var defined in a function frame
 (define (exists-in-frame? var frame)
   (exists-in-list? var (variables (function-bindings frame))))
+
+;TODO write me
+;(define (lookup-list list ))
 
 ; Looks up a value in the environment.  If the value is a boolean, it converts our languages boolean type to a Scheme boolean type
 ; first it looks in the given function frame, then in the parents up the parent tree to global
 ; Returns an error if the variable does not have a legal value
 (define (lookup var fname environment)
     (if (not (exists? var fname environment))
-        (myerror "error: undefined variable: " var);if it doesn't exist, return error
+        (myerror "error: undefined variable: " var)
         (lookup-in-env var fname environment))) ;else return the value
 
 ; Return the value bound to a variable in the environment
@@ -403,17 +412,17 @@
 ; gives an error if the variable does not exist already
 ; to change global variable, put 'global as the fname
 ; returns the new state with this updated
-; TODO mark check
+; TODO mark check - passed the michael check
 (define (update var val fname state)
     (cond
       ;base case- global variables
       ((and (equal? fname 'global)
             (exists-in-frame? var (get-function 'global state))) (update-in-frame var val (get-function 'global state)))
-      ((not (exists-in-env? var state))
+      ((not (exists? var fname state))
         (myerror "error: variable used but not defined:" var))
       ((exists-in-frame? var (get-function fname state))
         (replace-function fname (update-in-frame var val (get-function fname state)) state))
-      (else (update var val (function-parent (get-funciton fname state)) state))))
+      (else (cons (get-function fname state) (update var val (function-parent (get-function fname state)) state)))))
 
 
 ; Changes the binding of a variable in the frame to a new value
@@ -443,7 +452,7 @@
      (cons new-frame (remaining-frames state)))
     (else (cons (top-frame state) (replace-function old-function-name new-frame (remaining-frames state))))))
 
-; adds the list of bindings to the given funciton in the state
+; adds the list of bindings to the given function in the state
 ; binding list is ((vars)(vals))
 ; returns the overall state
 (define (insert-binding-list newbindings fname state)
@@ -459,7 +468,7 @@
   (get-function 'global state))
 
 
-;lookup a funciton from the state, returns the closure
+;lookup a function from the state, returns the closure
 (define (get-function fname state)
   (cond
     ((null? state) (myerror "error: couldn't find function " fname))
@@ -468,7 +477,7 @@
     (else (get-function fname (remaining-frames state)))))
 
 
-;just checks for length right now, but change is-compatible to check that they're both numbers/boolean/etc
+;checks that l2 is a viable input to the function with formal params l1
 (define (is-compatible-param-list l1 l2 state)
   (cond
     ((and (null? l1) (null? l2)) #t)
@@ -479,6 +488,7 @@
 
 (define (is-compatible? x y state)
     ;TODO not sure if we need to check for compatibility?
+  ;needs y needs to be evaluate
     #t)
 
 
