@@ -7,20 +7,50 @@
 (load "functionParser.scm")
 
 
+
+
+;TODO delete these
+(define test-environment '((global () () ((a b c d x) (1 2 3 4 5)))))
+(define test2 '((factorial ()()((m n o p) (9 8 7 6)))  (global () () ((a b c d x) (1 2 3 4 5)))))
+
+
+
 ; An interpreter for the c-ish language that uses call/cc for the continuations.  Does not handle side effects.
 
 ; The functions that start interpret-...  all return the current environment.
 ; The functions that start eval-...  all return a value
 
 ; The main function.  Calls parser to get the parse tree and interprets it with a new environment.  The returned value is in the environment.
-(define interpret
-  (lambda (file)
+(define (interpret file)
     (scheme->language
      (call/cc
       (lambda (return)
-        (interpret-statement-list (parser file) (newenvironment) return
+        (interpret-statement-list (interpret-functions (parser file) (newenvironment)) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
-                                  (lambda (v env) (myerror "Uncaught exception thrown"))))))))
+                                  (lambda (v env) (myerror "Uncaught exception thrown")))))))
+
+; reads through the methods and binds all the functions and their closures in the state
+; returns the resulting state, calls on a new environment
+(define (interpret-functions input environment)
+  (cond
+    ((null? input) (newenvironment))
+    ((eq? 'var (statement-type statement)) (interpret-bind-global-variable (get-firstelement input)))
+    ((equal? 'function (statement-type statement)) (interpret-bind-function ))
+    (else interpret-functions (cdr input) environment))) ;TODO this isn't done
+
+
+
+
+
+
+
+
+
+          
+
+
+
+
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list
@@ -43,6 +73,7 @@
       ((eq? 'begin (statement-type statement)) (interpret-block statement environment return break continue throw))
       ((eq? 'throw (statement-type statement)) (interpret-throw statement environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement environment return break continue throw))
+      ((eq? 'funcall (statement-type statement)) 1);TODO funcall)
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 ; Calls the return continuation with the given expression value
@@ -51,11 +82,10 @@
     (return (eval-expression (get-expr statement) environment))))
 
 ; Adds a new variable binding to the environment.  There may be an assignment with the variable
-(define interpret-declare
-  (lambda (statement environment)
+(define (interpret-declare statement environment)
     (if (exists-declare-value? statement)
         (insert (get-declare-var statement) (eval-expression (get-declare-value statement) environment) environment)
-        (insert (get-declare-var statement) 'novalue environment))))
+        (insert (get-declare-var statement) 'novalue environment)))
 
 ; Updates the environment to add an new binding for a variable
 (define (interpret-assign statement environment)
@@ -227,75 +257,43 @@
 ; Environment/State Functions
 ;------------------------
 
-; some abstractions
-(define topframe car)
-(define remainingframes cdr)
+; closure is of the form:
+;((function name)(parameter list)(function body)(state when the function was bound))
+; environment is of the form:
+;((function1 closure) (function2 closure) ... (global variables))
 
-; Returns the list of variables from a frame
+;global variables are variables bound in the "function" named 'global
+
+
+; some abstractions
+(define top-frame car)
+(define remaining-frames cdr)
+
+; abstractions for the dealing with closures
+(define (function-name closure)
+  (car closure))
+(define (function-parameters closure)
+  (cadr closure))
+(define (function-body closure)
+  (caddr closure))
+(define (function-bindings closure)
+  (cadddr closure))
+
 (define (variables frame)
   (car frame))
+(define (vals frame)
+  (cadr frame))
 
-; Returns the values from a frame
-(define (values frame)
-    (cadr frame))
+(define (new-frame)
+  '(()()))
 
-; create an empty frame: a frame is two lists ((variables)(values))
-(define (newframe)
-  '(() ()))
+; creates a new function frame
+(define (new-function-frame fname)
+  (list fname '() '() (new-frame)))
 
 ; create a new empty environment
-(define (newenvironment)
-  (list (newframe)))
-
-; add a frame onto the top of the environment
-(define (push-frame environment)
-    (cons (newframe) environment))
-
-; remove a frame from the environment
-(define (pop-frame environment)
-    (cdr environment))
-
-; does a variable exist in the environment?
-(define (exists? var environment)
-    (cond
-      ((null? environment) #f)
-      ((exists-in-list? var (variables (topframe environment))) #t)
-      (else (exists? var (remainingframes environment)))))
-
-; does a variable exist in a list?
-(define exists-in-list?
-  (lambda (var l)
-    (cond
-      ((null? l) #f)
-      ((eq? var (car l)) #t)
-      (else (exists-in-list? var (cdr l))))))
-
-; Looks up a value in the environment.  If the value is a boolean, it converts our languages boolean type to a Scheme boolean type
-(define lookup
-  (lambda (var environment)
-    (lookup-variable var environment)))
-
-; A helper function that does the lookup.  Returns an error if the variable does not have a legal value
-(define lookup-variable
-  (lambda (var environment)
-    (let ((value (lookup-in-env var environment)))
-      (if (eq? 'novalue value)
-          (myerror "error: variable without an assigned value:" var)
-          value))))
-
-; Return the value bound to a variable in the environment
-(define (lookup-in-env var environment)
-    (cond
-      ((null? environment) (myerror "error: undefined variable" var))
-      ((exists-in-list? var (variables (topframe environment))) (lookup-in-frame var (topframe environment)))
-      (else (lookup-in-env var (cdr environment)))))
-
-; Return the value bound to a variable in the frame
-(define lookup-in-frame
-  (lambda (var frame)
-    (cond
-      ((not (exists-in-list? var (variables frame))) (myerror "error: undefined variable" var))
-      (else (language->scheme (get-value (indexof var (variables frame)) (values frame)))))))
+(define (new-environment)
+  (list (new-function-frame 'global)))
 
 ; Get the location of a name in a list of names
 (define indexof
@@ -312,81 +310,126 @@
       ((zero? n) (car l))
       (else (get-value (- n 1) (cdr l))))))
 
-; Adds a new variable/value binding pair into the environment.  Gives an error if the variable already exists in this frame.
-;returns the new environment
-(define (insert var val environment)
-    (if (exists-in-list? var (variables (topframe environment)))
-        (myerror "error: variable is being re-declared:" var)
-        (cons (add-to-frame var val (topframe environment)) (remainingframes environment))))
-
-; Changes the binding of a variable to a new value in the environment.  Gives an error if the variable does not exist.
-(define update
-  (lambda (var val environment)
-    (if (exists? var environment)
-        (update-existing var val environment)
-        (myerror "error: variable used but not defined:" var))))
-
-; Add a new variable/value pair to the frame.
-(define (add-to-frame var val frame)
-    (list (cons var (variables frame)) (cons (scheme->language val) (values frame))))
-
-; Changes the binding of a variable in the environment to a new value
-(define update-existing
-  (lambda (var val environment)
-    (if (exists-in-list? var (variables (car environment)))
-        (cons (update-in-frame var val (topframe environment)) (remainingframes environment))
-        (cons (topframe environment) (update-existing var val (remainingframes environment))))))
-
-; Changes the binding of a variable in the frame to a new value.
-(define update-in-frame
-  (lambda (var val frame)
-    (list (variables frame) (update-in-frame-values var val (variables frame) (values frame)))))
-
-; Changes a variable binding by placing the new value in the appropriate place in the values
-(define update-in-frame-values
-  (lambda (var val varlist vallist)
+; does a variable exist in a list?
+(define exists-in-list?
+  (lambda (var l)
     (cond
-      ((eq? var (car varlist)) (cons (scheme->language val) (cdr vallist)))
-      (else (cons (car vallist) (update-in-frame-values var val (cdr varlist) (cdr vallist)))))))
+      ((null? l) #f)
+      ((eq? var (car l)) #t)
+      (else (exists-in-list? var (cdr l))))))
 
-; closure is of the form:
-;((function name)(parameter list)(function body)(bindings from cstate when the function was created))
-; environment is of the form:
-;((function1 closure) (function2 closure) ... (global variables))
+; add a frame onto the top of the environment
+(define (push-function-frame name environment)
+    (cons (new-function-frame name) environment))
 
-; abstractions for the dealing with closures
-(define (function-name closure)
-  (car closure))
-(define (function-parameters closure)
-  (cadr closure))
-(define (function-body closure)
-  (caddr closure))
-(define (function-bindings closure)
-  (cadddr closure))
-;TODO merge this with the given mstate solution
-  ;change the state to be {(f1 closure) (f2 closure) (global variables)}
+; remove a frame from the environment
+(define (pop-function-frame environment)
+    (remaining-frames environment))
+
+; does a variable exist in the environment?
+; checks in the fname frame first, then global vbls
+(define (exists? var fname environment)
+    (cond
+      ((null? environment) #f)
+      ((exists-in-frame? var (get-function fname environment)) #t)
+      ;we don't want to recurse on the next function since it's static scoping- go straight to global variables
+      ;TODO if we have scoping problems check here
+      (else (exists-in-frame? var (get-global-closure environment)))))
+
+;is the var defined in a function frame
+(define (exists-in-frame? var frame)
+  (exists-in-list? var (variables (function-bindings frame))))
+
+; Looks up a value in the environment.  If the value is a boolean, it converts our languages boolean type to a Scheme boolean type
+; first it looks in the given function frame, then looks in the global variables
+; Returns an error if the variable does not have a legal value
+(define (lookup var fname environment)
+    (if (not (exists? var fname environment))
+        (myerror "error: undefined variable: " var);if it doesn't exist, return error
+        (lookup-in-env var fname environment)));else return the value
+
+; Return the value bound to a variable in the environment
+(define (lookup-in-env var fname environment)
+  (if (exists-in-frame? var (get-function fname environment))
+      (lookup-in-frame var (get-function fname environment))
+      (lookup-in-frame var (get-global-closure environment))));TODO if we need to change the scoping somehow, here is where we change it
+
+; Return the value bound to a variable in the frame
+(define (lookup-in-frame var frame)
+  (language->scheme (get-value (indexof var (variables (function-bindings frame))) (vals (function-bindings frame)))))
+
+; Adds a new (var, val) binding pair into the function defined in fname
+; if we're defining a global variable, put fname = 'global
+(define (insert var val fname state)
+    (if (exists-in-frame? var (get-function fname state))
+        (myerror "error: variable is being re-declared:" var)
+        (replace-function fname (replace-bindings (get-function fname state) (insert-in-frame var val (get-function fname state))) state)))
+
+;insert the var val pair into the given function frame
+(define (insert-in-frame var val frame)
+  (list (cons var (variables (function-bindings frame)))
+        (cons (scheme->language val) (vals (function-bindings frame)))))
+
+; Changes the binding of a variable to a new value in the environment
+; gives an error if the variable does not exist already
+; to change global variable, put 'global as the fname
+; returns the new state with this updated
+(define (update var val fname state)
+    (if (exists-in-frame? var (get-function fname state))
+        (replace-function fname (update-in-frame var val (get-function fname state)) state)
+        (myerror "error: variable used but not defined:" var)))
+
+; Changes the binding of a variable in the frame to a new value
+; returns the updated frame
+(define (update-in-frame var val frame)
+  (replace-bindings frame (replace-varval-pair var val (variables (function-bindings frame)) (vals (function-bindings frame)))))
+  
+; Changes a variable binding by placing the new value in the appropriate place in the values
+; returns the new updated bindings
+(define (replace-varval-pair var val varlist vallist)
+    (cond
+      ((eq? var (car varlist)) (list varlist (cons (scheme->language val) (cdr vallist))))
+      (else (add-pair (car varlist) (car vallist) (replace-varval-pair var val (cdr varlist) (cdr vallist))))))
+
+;TODO check if this can be re-used anywhere to clean up stuff
+(define (add-pair var val  bindings)
+  (list (cons var (variables bindings)) (cons val (vals bindings))))
+
+; helper for insert to reconstruct the state after insertion
+(define (replace-bindings frame newbindings)
+  (list (function-name frame) (function-parameters frame) (function-body frame) newbindings))
+
+;helper for insert to reconstruct the state after insertion
+(define (replace-function old-function-name new-frame state)
+  (cond
+    ((equal? old-function-name (function-name (top-frame state)))
+     (cons new-frame (remaining-frames state)))
+    (else (cons (top-frame state) (replace-function old-function-name new-frame (remaining-frames state))))))
+
+
+
+
+
 
 ; stores the closure of the function in the current state, and adds it to the top of the environment
-(define (store-function-closure fName paramList fBody environment cstate)
+(define (interpret-bind-function fName paramList fBody environment cstate)
   (append (list fName paramList fBody (get-current-bindings environment)) cstate))
 
 ;global is the function name in the last frame of the state, so same as getting the function 'global
-(define (get-global-variables state)
+(define (get-global-closure state)
   (get-function 'global state))
 
+
+;lookup a funciton from the state, returns the closure
 (define (get-function fname state)
   (cond
     ((null? state) (myerror "error: couldn't find function " fname))
-    ((equal? fname (function-name (topframe state))) (topframe state))
-    ;I chose equal so that functions are caps independant, if we want factorial() and Factorial() to be considered the same we need to manipulate the atom fname
-    (else get-function fname (remainingframes state))))
+    ((equal? fname (function-name (top-frame state))) (top-frame state))
+    ;I chose equal so that functions are caps independant, if we want f() and F() to be considered the same we need to manipulate the atom fname
+    (else (get-function fname (remaining-frames state)))))
 
 
-
-
-
-
-; returns the parameters evaluated in the current state
+; returns the function environment, with variables evaluated in the state
 ; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
 (define (add-bindings formal-params actual-params function-environment state)
   (if (not(is-compatible-param-list formal-param actual-param state))
@@ -402,11 +445,12 @@
 (define (is-compatible-param-list l1 l2 state)
   (cond
     ((and (null? l1) (null? l2)) #t)
-    ((or (null? l1) (null? l2)) #f); if we get here, then one is not null so the length is mismatched, this is here so it returns and doesn't crash
+    ((or (null? l1) (null? l2)) #f); if we get here, then one is not null so the length is mismatched
+      ;this is here so it returns and doesn't crash
     ((not (is-compatible? (car l1) (car l2) state)) #f)
     (else (is-compatible-param-list (cdr l1) (cdr l2) state))))
 
-(define (is-compatible x y state)
+(define (is-compatible? x y state)
     ;TODO not sure if we need to check for compatibility?
     #t)
 
@@ -419,7 +463,7 @@
 (define (get-current-bindings environment)
   (cond
     ((null? environment) '())
-    (else ;TODO how to get all the current bindings depends on how we store them in the state
+    (else 1)));TODO how to get all the current bindings depends on how we store them in the state
       ;how do we structure saving the environment?
 
 
