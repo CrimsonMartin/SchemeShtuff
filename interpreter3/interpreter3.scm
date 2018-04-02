@@ -46,7 +46,7 @@
 
 
 
-          
+
 
 
 
@@ -383,7 +383,7 @@
 ; returns the updated frame
 (define (update-in-frame var val frame)
   (replace-bindings frame (replace-varval-pair var val (variables (function-bindings frame)) (vals (function-bindings frame)))))
-  
+
 ; Changes a variable binding by placing the new value in the appropriate place in the values
 ; returns the new updated bindings
 (define (replace-varval-pair var val varlist vallist)
@@ -406,6 +406,14 @@
      (cons new-frame (remaining-frames state)))
     (else (cons (top-frame state) (replace-function old-function-name new-frame (remaining-frames state))))))
 
+; adds the list of bindings to the given funciton in the state
+; binding list is ((vars)(vals))
+; returns the overall state
+(define (add-binding-list newbindings fname state)
+  (cond
+    ((null? newbindings) state)
+    (else add-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) fname
+      (insert (car (variables newbindings)) (car (vals newbindings)) fname state))))
 
 
 
@@ -427,6 +435,9 @@
     ((equal? fname (function-name (top-frame state))) (top-frame state))
     ;I chose equal so that functions are caps independant, if we want f() and F() to be considered the same we need to manipulate the atom fname
     (else (get-function fname (remaining-frames state)))))
+
+
+
 
 
 ; returns the function environment, with variables evaluated in the state
