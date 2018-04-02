@@ -57,6 +57,25 @@
 
 
 
+
+; returns the function environment, with variables evaluated in the state
+; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
+(define (add-bindings formal-params actual-params function-environment state)
+  (if (not(is-compatible-param-list formal-param actual-param state))
+      (myerror "parameter mismatch : formal parameters should be " formal-params)
+      (add-param-bindings formal-params actual-params function-environment state)))
+
+
+;
+(define (add-param-bindings f-params a-params environment state)
+  (cond
+    ((null? f-params) '())
+    (else (add-param-bindings (cdr f-params) (cdr a-params)(insert (get-firstelement f-param) (eval-expression (get-firstelement a-params) state) environment) state))))
+
+
+
+
+
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 (define interpret-statement-list
   (lambda (statement-list environment return break continue throw)
@@ -334,16 +353,16 @@
     (cons (new-function-frame name) environment))
 
 ; remove a frame from the environment
-(define (pop-function-frame environment)
+(define (pop-function-frame environment) ;TODO replace pop-frame/pop-function-frame with update-function-params
     (remaining-frames environment))
 
 ; does a variable exist in the environment?
 ; checks in the fname frame first, then parent up the parent function list
 (define (exists? var fname environment)
     (cond
-      ((null? environment) #f)
-      ((equal? 'global-parent (function-parent (get-funciton fname environment))) #f)
-      ((exists-in-frame? var (get-function fname environment)) #t)
+      ;if we're on global (base) funciton frame, return if it's a global vbl or not
+      ((equal? 'global (funciton-name (get-function fname))) (exists-in-frame? var (get-function 'global)))
+      ;else recurse on the parent funciton frame
       (else (exists? var ((get-funciton (function-parent (get-funciton fname)) environment)) environment))))
 
 ;is the var defined in a function frame
@@ -356,14 +375,13 @@
 (define (lookup var fname environment)
     (if (not (exists? var fname environment))
         (myerror "error: undefined variable: " var);if it doesn't exist, return error
-        (lookup-in-env var fname environment)));else return the value
+        (lookup-in-env var fname environment))) ;else return the value
 
 ; Return the value bound to a variable in the environment
 (define (lookup-in-env var fname environment)
   (if (exists-in-frame? var (get-function fname environment))
       (lookup-in-frame var (get-function fname environment))
-      (lookup-in-frame var (get-global-closure environment))))
-      ;TODO if we need to change the scoping somehow, here is where we change it
+      (lookup-in-env var (function-parent (get-function fname environment)) environment) ))
 
 ; Return the value bound to a variable in the frame
 (define (lookup-in-frame var frame)
@@ -385,10 +403,18 @@
 ; gives an error if the variable does not exist already
 ; to change global variable, put 'global as the fname
 ; returns the new state with this updated
+; TODO mark check
 (define (update var val fname state)
-    (if (exists-in-frame? var (get-function fname state))
-        (replace-function fname (update-in-frame var val (get-function fname state)) state)
-        (myerror "error: variable used but not defined:" var)))
+    (cond
+      ;base case- global variables
+      ((and (equal? fname 'global)
+            (exists-in-frame? var (get-function 'global state))) (update-in-frame var val (get-function 'global state)))
+      ((not (exists-in-env? var state))
+        (myerror "error: variable used but not defined:" var))
+      ((exists-in-frame? var (get-function fname state))
+        (replace-function fname (update-in-frame var val (get-function fname state)) state))
+      (else (update var val (function-parent (get-funciton fname state)) state))))
+
 
 ; Changes the binding of a variable in the frame to a new value
 ; returns the updated frame
@@ -441,21 +467,6 @@
     ;I chose equal so that functions are caps independant, if we want f() and F() to be considered the same we need to manipulate the atom fname
     (else (get-function fname (remaining-frames state)))))
 
-
-
-; returns the function environment, with variables evaluated in the state
-; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
-(define (add-bindings formal-params actual-params function-environment state)
-  (if (not(is-compatible-param-list formal-param actual-param state))
-      (myerror "parameter mismatch : formal parameters should be " formal-params)
-      (add-param-bindings formal-params actual-params function-environment state)))
-
-
-;
-(define (add-param-bindings f-params a-params environment state)
-  (cond
-    ((null? f-params) '())
-    (else (add-param-bindings (cdr f-params) (cdr a-params)(insert (get-firstelement f-param) (eval-expression (get-firstelement a-params) state) environment) state))))
 
 ;just checks for length right now, but change is-compatible to check that they're both numbers/boolean/etc
 (define (is-compatible-param-list l1 l2 state)
