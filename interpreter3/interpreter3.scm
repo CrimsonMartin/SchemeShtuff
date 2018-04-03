@@ -54,7 +54,7 @@
 ; evaluates for the return value of main function
 ; TODO check that it's the right return continuation- each function creates their own return continuation
 (define (eval-main state return break continue throw)
-  (interpret-statement-list (function-body (get-function 'main state)) state return break continue throw))
+  (interpret-statement-list (function-body (get-function 'main state)) 'global state return break continue throw))
 
 
 
@@ -75,6 +75,7 @@
 
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
+; pname is the name of the calling function
 (define interpret-statement-list
   (lambda (statement-list pname environment return break continue throw)
     (if (null? statement-list)
