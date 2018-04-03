@@ -6,13 +6,19 @@
 
 (load "functionParser.scm")
 
+#|
+We couldn't figgure out how to send back the input parameters after executing the body of the function, so that's why it crashes.
+Hopefully call/cc for the function execution is in the right place, but for the above reason, we couldn't get it to execute.
+
+The idea was to have the state be ((function1 closure) (function2 closure) ... (global variables))
+where each closure is (function-name function-parent funciton-parameters funciton-body active-bindings)
+
+function-parent is the parent function where the function was defined, in the case of global functions it is set to 'global
 
 
+interpret-functions returns the state with all the global functions declared and the global variables set
 
-;TODO delete these        ( () () )
-(define test-environment '((global () () ((a b c d x) (1 2 3 4 5)))))
-(define test2 '((factorial global (p1)(hotbody1)((m n o p) (9 8 7 6))) (global global-parent (p2) (hotbody2) ((a b c d x) (1 2 3 4 5)))))
-
+eval-main tries to run interpret in the body of the function main|#
 
 
 ; An interpreter for the c-ish language that uses call/cc for the continuations.  Does not handle side effects.
@@ -25,9 +31,9 @@
     (scheme->language
      (call/cc
       (lambda (return)
-        (eval-main (interpret-functions (parser file) (new-environment) (new-bindings)) return; TODO re-define
+        (eval-main (interpret-functions (parser file) (new-environment)) return
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
-                                  (lambda (v env) (myerror "Uncaught exception thrown")))))))
+                                  (lambda (v env) (myerror "Uncaught exception thrown"))) ))))
 
 ; reads through the methods and binds all the functions and their closures in the state
 ; returns the resulting state
@@ -38,7 +44,7 @@
     ((and (eq? 'var (statement-type input)) (not (exists-operand2? input))); (var x)
      (insert (operand1 input) 'novalue 'global environment))
     ((and (eq? 'var (statement-type input)) (exists-operand2? input)); (var x 10)
-     (insert (operand1 input) (operand2 input) 'global environment))
+     (insert-binding (operand1 input) (operand2 input) 'global environment))
     ((equal? 'function (statement-type input)) ;function decleration
       (interpret-bind-function (cdr input) environment))
     ((list? (car input)) (interpret-functions (cdr input) (interpret-functions (car input) environment)  ))
@@ -58,11 +64,8 @@
 
 ; state already has main declared in body
 ; evaluates for the return value of main function
-; TODO check that it's the right return continuation- each function creates their own return continuation
 (define (eval-main state return break continue throw)
   (interpret-statement-list (function-body (get-function 'main state)) 'global state return break continue throw))
-
-
 
 
 
@@ -75,9 +78,6 @@
       (myerror "parameter mismatch : formal parameters should be " formal-params)
       (add-param-bindings formal-params actual-params function-environment state)))
 
-;add-param-bindings (insert (get-firstelement f-param) (eval-expression (get-firstelement a-params) state) environment) state))))
-
-
 
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
@@ -86,7 +86,7 @@
   (lambda (statement-list pname environment return break continue throw)
     (if (null? statement-list)
         environment
-        (interpret-statement-list (cdr statement-list) (interpret-statement (car statement-list) pname environment return break continue throw) return break continue throw))))
+        (interpret-statement-list (cdr statement-list) pname (interpret-statement (car statement-list) pname environment return break continue throw) return break continue throw))))
 
 ; interpret a statement in the environment with continuations for return, break, continue, throw
 (define interpret-statement
@@ -102,32 +102,49 @@
       ((eq? 'begin (statement-type statement)) (interpret-block statement pname environment return break continue throw))
       ((eq? 'throw (statement-type statement)) (interpret-throw statement pname environment throw))
       ((eq? 'try (statement-type statement)) (interpret-try statement pname environment return break continue throw))
-      ((eq? 'funcall (statement-type statement)) (interpret-funcall statement pname environment return break comtinue throw));TODO this needs to be a new return continuation I think
+      ((eq? 'funcall (statement-type statement)) (call/cc ;whenever we're inside a funcall, return brings us back here rather than to the beginning of the function
+                                                  (lambda (return) (return (interpret-funcall statement  statement environment return break continue throw)))))
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
-(define (interpret-funcall statement pname environment return break continue throw)
-  2
-    )
+
+; when we evaluate a function, we need to pass back the parameters that were input into the function into the parent function's bindings- update them
+; each time we modify variables inside, we already update them as needed to the parent functions up the chain to global variables
+; so 1: evaluate the actual parameter list in the environment
+; 2: pass the ((formal params)(evaluated actual params)) bindings into the bindings of the function
+; 3: run the function
+;     - automatically updates the variables wherever they need to be on an equals, since update goes up the call tree until the variable is defined
+; 4: pass the modified function bindings back to the parent function recursively, until it updates wherever they are defined
+; 5: return the value of the return continuation in the function (if it exists- if not, just do 4)
+(define (interpret-funcall statement fname environment return break continue throw)
+ ; (length (function-parameters (get-function fname environment)))
+  
+
+  ;returns the state after the function body has been executed
+           (interpret-statement-list (function-body (get-funciton fname environment)) fname
+                   (insert-binding-list (list (function-params (get-function fname environment))
+                                              (lookup-list (function-params (get-function fname environment)) fname state))
+                       fname environment)
+                   return break continue throw))
 
 ; Calls the return continuation with the given expression value
 (define interpret-return
-  (lambda (statement pname environment return)
-    (return (eval-expression (get-expr statement) pname environment))))
+  (lambda (statement fname environment return)
+    (return (eval-expression (get-expr statement) fname environment))))
 
 ; Adds a new variable binding to the environment.  There may be an assignment with the variable
 (define (interpret-declare statement pname environment)
     (if (exists-declare-value? statement)
-        (insert-binding (get-declare-var statement) (eval-expression (get-declare-value statement) environment) pname environment)
+        (insert-binding (get-declare-var statement) (eval-expression (get-declare-value statement) pname environment) pname environment)
         (insert-binding (get-declare-var statement) 'novalue pname environment)))
 
 ; Updates the environment to add an new binding for a variable
 (define (interpret-assign statement pname environment)
-    (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) environment) pname environment))
+    (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) pname environment) pname environment))
 
 ; We need to check if there is an else condition.  Otherwise, we evaluate the expression and do the right thing.
 (define (interpret-if statement pname environment return break continue throw)
     (cond
-      ((eval-expression (get-condition statement) environment) (interpret-statement (get-then statement) pname environment return break continue throw))
+      ((eval-expression (get-condition statement) pname environment) (interpret-statement (get-then statement) pname environment return break continue throw))
       ((exists-else? statement) (interpret-statement (get-else statement) pname environment return break continue throw))
       (else environment)))
 
@@ -143,13 +160,13 @@
 
 ; Interprets a block.  The break, continue, and throw continuations must be adjusted to pop the environment
 (define (interpret-block statement pname environment return break continue throw)
-    (pop-frame (interpret-statement-list (cdr statement) ;TODO this can't just make a new block
+    (pop-function-frame (interpret-statement-list (cdr statement)
                                          pname
                                          (push-frame environment)
                                          return
-                                         (lambda (env) (break (pop-frame env)))
-                                         (lambda (env) (continue (pop-frame env)))
-                                         (lambda (v env) (throw v (pop-frame env))))))
+                                         (lambda (env) (break (pop-function-frame env)))
+                                         (lambda (env) (continue (pop-function-frame env)))
+                                         (lambda (v env) (throw v (pop-function-frame env))))))
 
 ; We use a continuation to throw the proper value. Because we are not using boxes, the environment/state must be thrown as well so any environment changes will be kept
 (define (interpret-throw statement pname environment throw)
@@ -159,20 +176,19 @@
 
 ; Create a continuation for the throw.  If there is no catch, it has to interpret the finally block, and once that completes throw the exception.
 ;   Otherwise, it interprets the catch block with the exception bound to the thrown value and interprets the finally block when the catch is done
-;TODO figgure this out, no clue what's happening here
 (define (create-throw-catch-continuation catch-statement pname environment return break continue throw jump finally-block)
     (cond
       ((null? catch-statement) (lambda (ex env) (throw ex (interpret-block finally-block env return break continue throw))))
       ((not (eq? 'catch (statement-type catch-statement))) (myerror "Incorrect catch statement"))
       (else (lambda (ex env)
               (jump (interpret-block finally-block
-                                     (pop-frame (interpret-statement-list
+                                     (pop-function-frame (interpret-statement-list
                                                  (get-body catch-statement)
                                                  (insert-binding (catch-var catch-statement) ex (push-frame env))
                                                  return
-                                                 (lambda (env2) (break (pop-frame env2)))
-                                                 (lambda (env2) (continue (pop-frame env2)))
-                                                 (lambda (v env2) (throw v (pop-frame env2)))))
+                                                 (lambda (env2) (break (pop-function-frame env2)))
+                                                 (lambda (env2) (continue (pop-function-frame env2)))
+                                                 (lambda (v env2) (throw v (pop-function-frame env2)))))
                                      return break continue throw))))))
 
 ; To interpret a try block, we must adjust  the return, break, continue continuations to interpret the finally block if any of them are used.
@@ -208,7 +224,6 @@
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
       ((not (list? expr)) (lookup expr fname environment))
-      ;TODO add function evaluation
       (else (eval-operator expr fname environment))))
 
 ; Evaluate a binary (or unary) operator.  Although this is not dealing with side effects, I have the routine evaluate the left operand first and then
@@ -419,26 +434,32 @@
         (myerror "error: variable is being re-declared:" var)
         (replace-function fname (replace-bindings (get-function fname state) (insert-in-frame var val (get-function fname state))) state)))
 
-;insert the var val pair into the given function frame
+; insert the var val pair into the given function frame
 (define (insert-in-frame var val frame)
   (list (cons var (variables (function-bindings frame)))
         (cons (scheme->language val) (vals (function-bindings frame)))))
+
+
+;bulk updates the ((vars )(vals)) in bindings in the fname state
+;assumes it's a valid bindings
+(define (update-list bindings fname state)
+  (cond
+    ((null? (car bindings)) state)
+    (else (update (caar bindings) (cadr bindings) fname (update-list (list (cdar bindings)(cddr bindings)) fname state)))))
+
 
 ; Changes the binding of a variable to a new value in the environment
 ; gives an error if the variable does not exist already
 ; to change global variable, put 'global as the fname
 ; returns the new state with this updated
-; TODO mark check 
 (define (update var val fname state)
-    (cond
-      ;base case- global variables
-      ((and (equal? fname 'global)
-            (exists-in-frame? var (get-function 'global state))) (update-in-frame var val (get-function 'global state)))
-      ((not (exists? var fname state))
-        (myerror "error: variable used but not defined:" var))
-      ((exists-in-frame? var (get-function fname state))
-        (replace-function fname (update-in-frame var val (get-function fname state)) state))
-      (else (cons (get-function fname state) (update var val (function-parent (get-function fname state)) state)))))
+  (cond
+    ;((eq? 'global fname) (update-in-frame var val (get-function 'global state)))
+    ((not (exists? var fname state)) (myerror "error: variable used but not defined: "var))
+    ((and (exists-in-frame? var (top-frame state)) (eq? fname (function-name (top-frame state)) )) ;we're in the right function frame
+      (replace-function 'fname (update-in-frame var val (top-frame state)) state))
+    (else (cons (top-frame state) (update var val fname (remaining-frames state))))))
+
 
 
 ; Changes the binding of a variable in the frame to a new value
@@ -453,7 +474,7 @@
       ((eq? var (car varlist)) (list varlist (cons (scheme->language val) (cdr vallist))))
       (else (add-pair (car varlist) (car vallist) (replace-varval-pair var val (cdr varlist) (cdr vallist))))))
 
-;TODO check if this can be re-used anywhere to clean up stuff
+;adds the var val pair to the given bindings
 (define (add-pair var val  bindings)
   (list (cons var (variables bindings)) (cons val (vals bindings))))
 
@@ -464,6 +485,7 @@
 ;helper for insert to reconstruct the state after insertion
 (define (replace-function old-function-name new-frame state)
   (cond
+    ((null? state) '())
     ((equal? old-function-name (function-name (top-frame state)))
      (cons new-frame (remaining-frames state)))
     (else (cons (top-frame state) (replace-function old-function-name new-frame (remaining-frames state))))))
@@ -477,12 +499,9 @@
     (else insert-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) fname
       (insert-binding (car (variables newbindings)) (car (vals newbindings)) fname state))))
 
-
-
 ;global is the function name in the last frame of the state, so same as getting the function 'global
 (define (get-global-closure state)
   (get-function 'global state))
-
 
 ;lookup a function from the state, returns the closure
 (define (get-function fname state)
@@ -503,53 +522,8 @@
     (else (is-compatible-param-list (cdr l1) (cdr l2) state))))
 
 (define (is-compatible? x y state)
-    ;TODO not sure if we need to check for compatibility?
-  ;needs y needs to be evaluate
+    ;since we don't have types, we can't check if it is compatible or not until run time
     #t)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ; Miscelaneous helper functions
