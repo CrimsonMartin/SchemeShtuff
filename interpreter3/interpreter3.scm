@@ -25,30 +25,36 @@
     (scheme->language
      (call/cc
       (lambda (return)
-        (interpret-statement-list (interpret-functions (parser file) (new-environment) (new-bindings)) return; TODO change to eval-main as last step
+        (eval-main (interpret-functions (parser file) (new-environment) (new-bindings)) return; TODO re-define
                                   (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown")))))))
 
 ; reads through the methods and binds all the functions and their closures in the state
 ; returns the resulting state
 ; the environment from each step is used by the next one
-(define (interpret-functions input environment current-bindings)
+(define (interpret-functions input environment)
   (cond
     ((null? input) environment)
-    ((eq? 'var (statement-type input)) ) ;bind global variable
+    ((and (eq? 'var (statement-type input)) (not (exists-operand2? input))); (var x)
+     (insert (operand1 input) 'novalue 'global environment))
+    ((and (eq? 'var (statement-type input)) (exists-operand2? input)); (var x 10)
+     (insert (operand1 input) (operand2 input) 'global environment))
     ((equal? 'function (statement-type input)) ;function decleration
-      ;return an environment with the function bound- cdr input is everything but 'function
-      (interpret-bind-function (cdr input) environment current-bindings))
-    (else interpret-functions (cdr input) (interpret-functions (car input) environment current-bindings))))
+      (interpret-bind-function (cdr input) environment))
+    ((list? (car input)) (interpret-functions (cdr input) (interpret-functions (car input) environment)  ))
+    (else (myerror "illegal global declaration"))))
 
-(define (interpret-bind-function function-statement state current-bindings)
-  (interpret-bind-function-parts (function-name function) (function-parameters function) (function-body function) ))
+(define (interpret-bind-function function state)
+  (interpret-bind-function-parts (function-formal-name function) (function-formal-params function) (function-formal-body function) state))
+
+(define (function-formal-name f) (car f))
+(define (function-formal-params f) (cadr f))
+(define (function-formal-body f) (caddr f))
 
 ; stores the closure of the function in the current state
 ; returns the updated state
-;TODO change this to insert for error-checking
-(define (interpret-bind-function-parts pname paramList fBody current-bindings cstate)
-    (append (list pname paramList fBody current-bindings cstate)))
+(define (interpret-bind-function-parts fname paramList fbody state)
+    (cons (list fname 'global paramList fbody (new-bindings)) state))
 
 ; state already has main declared in body
 ; evaluates for the return value of main function
@@ -100,13 +106,13 @@
       (else (myerror "Unknown statement:" (statement-type statement))))))
 
 (define (interpret-funcall statement pname environment return break continue throw)
-  (3;TODO does the stuff from the notes
-    ))
+  2
+    )
 
 ; Calls the return continuation with the given expression value
 (define interpret-return
   (lambda (statement pname environment return)
-    (return (eval-expression (get-expr statement) pname environment)))) ;TODO change the return continuation to point outside the function rather than overall
+    (return (eval-expression (get-expr statement) pname environment))))
 
 ; Adds a new variable binding to the environment.  There may be an assignment with the variable
 (define (interpret-declare statement pname environment)
@@ -196,40 +202,40 @@
       (else (cons 'begin (cadr finally-statement)))))
 
 ; Evaluates all possible boolean and arithmetic expressions, including constants and variables.
-(define (eval-expression expr pname environment)
+(define (eval-expression expr fname environment)
     (cond
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
-      ((not (list? expr)) (lookup expr pname environment))
+      ((not (list? expr)) (lookup expr fname environment))
       ;TODO add function evaluation
-      (else (eval-operator expr pname environment))))
+      (else (eval-operator expr fname environment))))
 
 ; Evaluate a binary (or unary) operator.  Although this is not dealing with side effects, I have the routine evaluate the left operand first and then
 ; pass the result to eval-binary-op2 to evaluate the right operand.  This forces the operands to be evaluated in the proper order in case you choose
 ; to add side effects to the interpreter
-(define (eval-operator expr pname environment)
+(define (eval-operator expr fname environment)
     (cond
-      ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) pname environment)))
-      ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) pname environment)))
-      (else (eval-binary-op2 expr (eval-expression (operand1 expr) pname environment) pname environment))))
+      ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) fname environment)))
+      ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) fname environment)))
+      (else (eval-binary-op2 expr (eval-expression (operand1 expr) fname environment) fname environment))))
 
 ; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation.
-(define (eval-binary-op2 expr op1value pname environment)
+(define (eval-binary-op2 expr op1value fname environment)
     (cond
-      ((eq? '+ (operator expr)) (+ op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '- (operator expr)) (- op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '* (operator expr)) (* op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '/ (operator expr)) (quotient op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '% (operator expr)) (remainder op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '== (operator expr)) (isequal op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '!= (operator expr)) (not (isequal op1value (eval-expression (operand2 expr) pname environment))))
-      ((eq? '< (operator expr)) (< op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '> (operator expr)) (> op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '<= (operator expr)) (<= op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '>= (operator expr)) (>= op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '|| (operator expr)) (or op1value (eval-expression (operand2 expr) pname environment)))
-      ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) pname environment)))
+      ((eq? '+ (operator expr)) (+ op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '- (operator expr)) (- op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '* (operator expr)) (* op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '/ (operator expr)) (quotient op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '% (operator expr)) (remainder op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '== (operator expr)) (isequal op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '!= (operator expr)) (not (isequal op1value (eval-expression (operand2 expr) fname environment))))
+      ((eq? '< (operator expr)) (< op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '> (operator expr)) (> op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '<= (operator expr)) (<= op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '>= (operator expr)) (>= op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '|| (operator expr)) (or op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) fname environment)))
       (else (myerror "Unknown operator:" (operator expr)))))
 
 ; Determines if two values are equal.  We need a special test because there are both boolean and integer types.
@@ -365,15 +371,15 @@
 (define (pop-function-frame environment)
     (remaining-frames environment))
 
-; does a variable exist in the environment?(begin (if (null? input)
-; checks in the pname frame first, then parent up the parent function list
-(define (exists? var pname environment)
+; does a variable exist in the environment?
+; checks in the fname frame first, then parent up the parent function list
+(define (exists? var fname environment)
     (cond
       ;if we're on global (base) function frame, return if it's a global vbl or not
-      ((equal? 'global (function-name (get-function pname environment))) (exists-in-frame? var (get-function 'global environment)))
-      ((exists-in-frame? var (get-function pname environment)) #t)
+      ((equal? 'global (function-name (get-function fname environment))) (exists-in-frame? var (get-function 'global environment)))
+      ((exists-in-frame? var (get-function fname environment)) #t)
       ;else recurse on the parent function frame
-      (else (exists? var (function-parent (get-function pname environment)) environment))))
+      (else (exists? var (function-parent (get-function fname environment)) environment))))
 
 ;is the var defined in a function frame
 (define (exists-in-frame? var frame)
@@ -383,35 +389,35 @@
 ; looks up all the values in the list, and returns a list of values
 ; ex ((x y z) (1 2 3) is the bound variables in the state
 ; input (x y z) returns (1 2 3)
-(define (lookup-list list pname state)
+(define (lookup-list list fname state)
   (cond
     ((null? list) '())
-    (else (cons (lookup var pname environment) (lookup-list (cdr list) pname state)))))
+    (else (cons (lookup var fname environment) (lookup-list (cdr list) fname state)))))
 
 ; Looks up a value in the environment.  If the value is a boolean, it converts our languages boolean type to a Scheme boolean type
 ; first it looks in the given function frame, then in the parents up the parent tree to global
 ; Returns an error if the variable does not have a legal value
-(define (lookup var pname environment)
-    (if (not (exists? var pname environment))
+(define (lookup var fname environment)
+    (if (not (exists? var fname environment))
         (myerror "error: undefined variable: " var)
-        (lookup-in-env var pname environment))) ;else return the value
+        (lookup-in-env var fname environment))) ;else return the value
 
 ; Return the value bound to a variable in the environment
-(define (lookup-in-env var pname environment)
-  (if (exists-in-frame? var (get-function pname environment))
-      (lookup-in-frame var (get-function pname environment))
-      (lookup-in-env var (function-parent (get-function pname environment)) environment) ))
+(define (lookup-in-env var fname environment)
+  (if (exists-in-frame? var (get-function fname environment))
+      (lookup-in-frame var (get-function fname environment))
+      (lookup-in-env var (function-parent (get-function fname environment)) environment) ))
 
 ; Return the value bound to a variable in the frame
 (define (lookup-in-frame var frame)
   (language->scheme (get-value (indexof var (variables (function-bindings frame))) (vals (function-bindings frame)))))
 
-; Adds a new (var, val) binding pair into the function defined in pname
-; if we're defining a global variable, put pname = 'global
-(define (insert-binding var val pname state)
-    (if (exists-in-frame? var (get-function pname state))
+; Adds a new (var, val) binding pair into the function defined in fname
+; if we're defining a global variable, put fname = 'global
+(define (insert-binding var val fname state)
+    (if (exists-in-frame? var (get-function fname state))
         (myerror "error: variable is being re-declared:" var)
-        (replace-function pname (replace-bindings (get-function pname state) (insert-in-frame var val (get-function pname state))) state)))
+        (replace-function fname (replace-bindings (get-function fname state) (insert-in-frame var val (get-function fname state))) state)))
 
 ;insert the var val pair into the given function frame
 (define (insert-in-frame var val frame)
@@ -420,19 +426,19 @@
 
 ; Changes the binding of a variable to a new value in the environment
 ; gives an error if the variable does not exist already
-; to change global variable, put 'global as the pname
+; to change global variable, put 'global as the fname
 ; returns the new state with this updated
 ; TODO mark check 
-(define (update var val pname state)
+(define (update var val fname state)
     (cond
       ;base case- global variables
-      ((and (equal? pname 'global)
+      ((and (equal? fname 'global)
             (exists-in-frame? var (get-function 'global state))) (update-in-frame var val (get-function 'global state)))
-      ((not (exists? var pname state))
+      ((not (exists? var fname state))
         (myerror "error: variable used but not defined:" var))
-      ((exists-in-frame? var (get-function pname state))
-        (replace-function pname (update-in-frame var val (get-function pname state)) state))
-      (else (cons (get-function pname state) (update var val (function-parent (get-function pname state)) state)))))
+      ((exists-in-frame? var (get-function fname state))
+        (replace-function fname (update-in-frame var val (get-function fname state)) state))
+      (else (cons (get-function fname state) (update var val (function-parent (get-function fname state)) state)))))
 
 
 ; Changes the binding of a variable in the frame to a new value
@@ -465,11 +471,11 @@
 ; adds the list of bindings to the given function in the state
 ; binding list is ((vars)(vals))
 ; returns the overall state
-(define (insert-binding-list newbindings pname state)
+(define (insert-binding-list newbindings fname state)
   (cond
     ((null? newbindings) state)
-    (else insert-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) pname
-      (insert-binding (car (variables newbindings)) (car (vals newbindings)) pname state))))
+    (else insert-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) fname
+      (insert-binding (car (variables newbindings)) (car (vals newbindings)) fname state))))
 
 
 
@@ -481,7 +487,7 @@
 ;lookup a function from the state, returns the closure
 (define (get-function fname state)
   (cond
-    ((null? state) (myerror "error: couldn't find function " pname))
+    ((null? state) (myerror "error: couldn't find function " fname))
     ((equal? fname (function-name (top-frame state))) (top-frame state))
     ;I chose equal so that functions are caps independant, if we want f() and F() to be considered the same we need to manipulate the atom fname
     (else (get-function fname (remaining-frames state)))))
