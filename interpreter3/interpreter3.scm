@@ -117,7 +117,7 @@ eval-main tries to run interpret in the body of the function main|#
 ; 5: return the value of the return continuation in the function (if it exists- if not, just do 4)
 (define (interpret-funcall statement fname environment return break continue throw)
  ; (length (function-parameters (get-function fname environment)))
-  
+
 
   ;returns the state after the function body has been executed
            (interpret-statement-list (function-body (get-funciton fname environment)) fname
@@ -451,16 +451,26 @@ eval-main tries to run interpret in the body of the function main|#
 ; Changes the binding of a variable to a new value in the environment
 ; gives an error if the variable does not exist already
 ; to change global variable, put 'global as the fname
-; returns the new state with this updated
+; returns the new state with this update
+; looks in the given funciton, and if the value isn't found it recurses on the parent functions until it finds the variable, and updates it
 (define (update var val fname state)
   (cond
-    ;((eq? 'global fname) (update-in-frame var val (get-function 'global state)))
-    ((not (exists? var fname state)) (myerror "error: variable used but not defined: "var))
-    ((and (exists-in-frame? var (top-frame state)) (eq? fname (function-name (top-frame state)) )) ;we're in the right function frame
+    ((null? state) (begin '()
+                    (update-in-parent var val fname state)))
+    ((and (exists-in-frame? var (top-frame state))
+          (equal? fname (function-name (top-frame state))))
+            ;we're in the right function frame
       (replace-function 'fname (update-in-frame var val (top-frame state)) state))
     (else (cons (top-frame state) (update var val fname (remaining-frames state))))))
 
 
+(define (update-in-parent var val fname state)
+  (cond
+    ((and (equal? 'global (function-name (top-frame state)))
+          (not (exists-in-frame? var (top-frame state))))
+      ;we're in the global frame and the var still isn't found
+      (myerror "error: variable used but not defined: " var))
+    (else (update var val (funciton-parent) state))))
 
 ; Changes the binding of a variable in the frame to a new value
 ; returns the updated frame
