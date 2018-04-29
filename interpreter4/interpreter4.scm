@@ -412,26 +412,3 @@
 ;global is the function name in the last frame of the state, so same as getting the function 'global
 (define (get-global-closure state)
   (get-function 'global state))
-
-;lookup a function from the state, returns the closure
-(define (get-function fname state)
-  (cond
-    ((null? state) (myerror "error: couldn't find function " fname))
-    ((equal? fname (function-name (top-frame state))) (top-frame state))
-    ;I chose equal so that functions are caps independant, if we want f() and F() to be considered the same we need to manipulate the atom fname
-    (else (get-function fname (remaining-frames state)))))
-
-
-
-;checks that l2 is a viable input to the function with formal params l1
-(define (is-compatible-param-list l1 l2 state)
-  (cond
-    ((and (null? l1) (null? l2)) #t)
-    ((or (null? l1) (null? l2)) #f); if we get here, then one is not null so the length is mismatched
-      ;this is here so it returns and doesn't crash
-    ((not (is-compatible? (car l1) (car l2) state)) #f)
-    (else (is-compatible-param-list (cdr l1) (cdr l2) state))))
-
-(define (is-compatible? x y state)
-    ;since we don't have types, we can't check if it is compatible or not until run time
-    #t)

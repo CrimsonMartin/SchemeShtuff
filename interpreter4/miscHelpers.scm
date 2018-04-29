@@ -1,5 +1,19 @@
 
 
+;checks that l2 is a viable input to the function with formal params l1
+(define (is-compatible-param-list l1 l2 state)
+  (cond
+    ((and (null? l1) (null? l2)) #t)
+    ((or (null? l1) (null? l2)) #f); if we get here, then one is not null so the length is mismatched
+      ;this is here so it returns and doesn't crash
+    ((not (is-compatible? (car l1) (car l2) state)) #f)
+    (else (is-compatible-param-list (cdr l1) (cdr l2) state))))
+
+(define (is-compatible? x y state)
+    ;since we don't have types, we can't check if it is compatible or not until run time
+    #t)
+
+
 (define (language->scheme v)
 (cond
   ((eq? v 'false) #f)
