@@ -1,5 +1,5 @@
 ;designed for R5S5 scheme
-(load "mistHelpers.scm")
+(load "miscHelpers.scm")
 
 ; some abstractions
 (define (add-frame newframe state) (cons newframe state))
@@ -13,7 +13,6 @@
 (list (cons var (variables bindings)) (cons val (vals bindings))))
 
 
-
 ; class: (classname parentclass (instancefields) (functions) (constructors))
 (define (class-name frame) (car frame))
 (define (class-parent frame) (cadr frame))
@@ -21,46 +20,71 @@
 (define (class-functions frame) (cadddr frame))
 (define (class-constructors frame) (cadddr (cdr frame)))
 
-(define (new-class name parent instancefields funcitons constructors)
-(list name parent instancefields funcitons constructors))
-
-
-; checks in the class frame first, then parent
-(define (exists-in-class? var classname state)
-(if (null? state) #f
-  (exists-in-list? var (class-instancefields (get-class classname state)))))
-
-
 ; function: (name (parameters) (body) (closure))
 (define (function-name closure) (car closure))
 (define (function-parameters closure)(cadr closure))
 (define (function-body closure)(caddr closure))
 (define (function-bindings closure)(cadddr closure))
 
+
+(define (new-class name parent instancefields funcitons constructors)
+(list name parent instancefields funcitons constructors)
+
 (define (new-function name params body bindings)
 (list name params body bindings))
 
-;is the var defined in a function
-(define (exists-in-function? var frame)
-  (exists-in-list? var (variables (function-bindings frame))))
 
+(define (exists-in-function? var fframe)
+(exists-in-list? var (variables (function-bindings fframe))))
+
+(define (exists-in-class? var classname cframe)
+(exists-in-list? var (class-instancefields  cframe)))
+
+
+(define (get-class cname state)
+(cond
+  ((null? state) (myerror "error: class not defined- " cname))
+  ((eq? (class-name (top-frame state)) cname) (top-frame state))
+  (else (get-class cname (remaining-frames state)))))
+
+(define (get-function fname classfunctions)
+(cond
+  ((null? classfunctions) (myerror "error: function not defined- " functionname))
+  ((equal? fname (function-name (top-frame state))) (top-frame classfunctions))
+  (else (get-function fname (remaining-frames classfunctions)))
+
+
+;how to reconstruct the state and function frames
+(define (get-all-other-class cname state)
+(cond
+  ((null? state) (myerror "error: class not defined- " cname))
+  ((equal? cname (class-name (top-frame state)))
+    (remaining-frames state))
+  (else (cons (top-frame state) (get-all-other-class cname (remaining-frames state))))))
+
+(define (get-all-other-function fname classfunctions)
+(cond
+  ((null? classfunctions) (myerror "error: function not defined- " fname))
+  ((equal? fname (function-name (top-frame classfunctions)))
+    (remaining-frames classfunctions))
+  (else (cons (top-frame classfunctions) (get-all-other-function fname (remaining-frames classfunctions))))))
 
 
 
 
 ; Looks up a value in the environment
 ; Returns an error if the variable does not have a legal value
-(define (lookup var class state)
-    (if (not (exists? var class environment))
-        (myerror "error: undefined variable: " var)
-        (lookup-in-env var class environment)))
-
+;(define (lookup var class state)
+;    (if (not (exists? var class environment))
+;        (myerror "error: undefined variable: " var)
+;        (lookup-in-env var class environment)))
+;
 ; Return the value bound to a variable in the environment
-(define (lookup-in-env var class environment)
-  (if (exists-in-frame? var (get-function fname environment))
-      (lookup-in-frame var (get-function fname environment))
-      (lookup-in-env var (function-parent (get-function fname environment)) environment) ))
+;(define (lookup-in-env var class environment)
+;  (if (exists-in-frame? var (get-function fname environment))
+;      (lookup-in-frame var (get-function fname environment))
+;      (lookup-in-env var (function-parent (get-function fname environment)) environment) ))
 
 ; Return the value bound to a variable in the funtion
-(define (lookup-in-function var functionframe)
-  (language->scheme (get-value (indexof var (variables (function-bindings functionframe))) (vals (function-bindings functionframe)))))
+;(define (lookup-in-function var functionframe)
+;  (language->scheme (get-value (indexof var (variables (function-bindings functionframe))) (vals (function-bindings functionframe)))))
