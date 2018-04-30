@@ -7,6 +7,7 @@
 (define operand1 cadr)
 (define operand2 caddr)
 (define operand3 cadddr)
+(define NULL '())
 
 (define exists-operand2?
   (lambda (statement)
@@ -70,6 +71,8 @@
 (define (class-instance-functions frame) (cadddr (cdr frame)))
 (define (class-static-functions frame) (cadddr (cddr frame)))
 (define (class-constructors frame) (cadddr (cdddr frame)))
+
+(define (no-constructors) NULL)
 
 
 ; Changes a variable binding by placing the new value in the appropriate place in the values

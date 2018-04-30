@@ -26,17 +26,34 @@
           (lambda (v env) (myerror "Uncaught exception thrown"))) ))))
 
 
-
-(define (interpret-classes input state)
+(define (interpret-classes input env)
 (cond
-  ((null? input) state)
-  ((eq? (car input) 'class ) (decideStateClass (classBody l)(add (className l) (makeClass l state) state) (className l) (lambda (v) v) (lambda (v) (v)) (lambda (v) v) (lambda (v) v)(lambda (v) v)))
-  (else (interpret-classes (cdr input) (interpret-classes (car input) state))))
+  ((null? input) env)
+  ((eq? 'class (operator input))
+    (if (exists-operand2? input);we are extending a class
+      (interpret-declare-class (operand1 input) (operand1 (operand2 input)) (operand3 input) env)
+      ;else we're not extending a class - denote this by parent function called 'mainparent
+      (interpret-declare-class (opeand1 input) 'mainparent (opernad3 input) env)))
+  (else (interpret-classes (cdr input) (interpret-classes (car input) env)))))
+
+;returns the env after declaring the class in the env
+(define (interpret-declare-class name parent body env)
+(list (stack env)
+(add-class name parent (parse-instancefields body) (parse-staticfields body) (parse-instancefunctions body) (parse-staticfunctions) (no-constructors) (state env) )))
 
 
 
 
-
+  ;where initialFieldValues are non static variables and fieldValues are static varibales both static and non static methods are stored in the methodNames/Closures
+  (define (decideStateClass l state className return break continue throw catch)
+    (cond
+      ((null? l) (return state))
+       ((list? (operator l)) (decideStateClass (operator l) state className (lambda (v) (decideStateClass (cdr l) v className return continue break exit catch)) continue break exit catch))
+       ((eq? (operator l) 'static-function) (stateFunction l state className return continue break exit catch))
+       ((eq? (operator l) 'function) (stateNonStaticFunction l state className return continue break exit catch))
+       ((eq? (operator l) 'static-var)(stateStaticVariable l state className return continue break exit catch))
+       ((eq? (operator l) 'var)(stateNonStaticVariable l state className return continue break exit catch))
+       (else (return state))))
 
 
 

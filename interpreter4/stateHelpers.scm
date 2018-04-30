@@ -35,7 +35,6 @@
 (define (new-bindings) '(()()))
 (define (new-environment) '(()()))
 (define (new-stack-frame) '(()()))
-(define NULL '())
 
 (define (add-pair var val  bindings)
 (list (cons var (variables bindings)) (cons val (vals bindings))))
@@ -56,18 +55,11 @@
 (add-frame (list new-function name parent params body bindings) classfunctions))
 
 
-(define (exists-in-function? var fframe)
-(exists-in-list? var (vars (function-bindings fframe))))
-
 (define (is-static-vbl? var cframe)
 (exists-in-list? var (vars (class-static-fields cframe))))
 
 (define (is-static-fn? fname cframe)
 (null? (get-function-from-frame fname (class-static-functions cframe))))
-
-(define (exists-in-class? var cframe)
-(or (exists-in-list? var (vars (class-instance-fields cframe)))
-    (exists-in-list? var (vars (class-static-fields cframe)))))
 
 
 ; returns formal binding of the function fname in the given class in the environment
@@ -134,27 +126,43 @@
 (addframe newclass-frame (get-all-other-class oldclass-name state)))
 
 
-; everything below here 
 
-;needs to look in the function, then parent functions, then in the class field (don't worry about super, since if we super. then just call exists on the class parent instead of this class)
-(define (exists? var function class state)
+
+
+
+
+
+
+
+
+;needs to look in the function instance, then class instance, then parent function instances, then in the class instancefields, then class static fields
+; in that order
+(define (exists? var function class env)
 (cond
-  ((null? state) #f) ;this shouldn't happen
-  ((exists-in-function? var (get-function function (class-functions (get-class class state))))
-    #t)
-  ((eq? 'mainparent (function-parent (get-function function (class-functions (get-class class state)))))
-    (exists-in-class? var (get-class class state)))
-  (else (exists? var (function-parent (get-function function (class-functions (get-class class state)))) class state))))
+  ((
+  ((exists-in-function? var (get-function function class env)) #t)
+  ;checks class instance fields then class static fields
+  (else (exists-in-class? var (get-class class env)))
+
+
+(define (exists-in-function? var fframe)
+(exists-in-list? var (vars (function-bindings fframe))))
+
+(define (exists-in-class? var cframe)
+(or (exists-in-list? var (vars (class-instance-fields cframe)))
+    (exists-in-list? var (vars (class-static-fields cframe)))))
 
 
 
 ; Looks up a value in the environment - entry point function
 ; Returns an error if the variable does not have a legal value
-(define (lookup var function class state)
-    (if (not (exists? var function class state))
+(define (lookup var function class env)
+    (if (not (exists? var function class env))
       (myerror "error: undefined variable: " var)
       (lookup-in-env var function class state)))
 
+
+;first check the
 (define (lookup-in-env var function class state)
 (cond
   ((exists-in-function? var (get-function function (get-class class state)))
@@ -186,20 +194,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-; EVERYTHING BELOW HERE NEEDS TO BE REWORKED - redo when we finalize the idea of stack and state
 
 ; Adds a new (var, val) binding pair into the function defined in fname
 ; if we're defining a global variable, put fname = 'global
@@ -258,17 +252,7 @@
 (define (replace-bindings frame newbindings)
   (list (function-name frame) (function-parent frame) (function-parameters frame) (function-body frame) newbindings))
 
-;helper for insert to reconstruct the state after insertion
-(define (replace-function old-function-name new-frame state)
-  (cond
-    ((null? state) '())
-    ((equal? old-function-name (function-name (top-frame state)))
-     (cons new-frame (remaining-frames state)))
-    (else (cons (top-frame state) (replace-function old-function-name new-frame (remaining-frames state))))))
 
-; adds the list of bindings to the given function in the state
-; binding list is ((vars)(vals))
-; returns the overall state
 (define (insert-binding-list newbindings fname state)
   (cond
     ((null? newbindings) state)
