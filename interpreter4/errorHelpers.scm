@@ -1,5 +1,4 @@
 
-
 ;checks that l2 is a viable input to the function with formal params l1
 (define (is-compatible-param-list l1 l2 state)
   (cond
@@ -19,7 +18,7 @@
   (if (and (number? val1) (number? val2))
     (= val1 val2)
     (eq? val1 val2)))
-    
+
 
 (define (language->scheme v)
 (cond

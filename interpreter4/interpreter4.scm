@@ -7,7 +7,7 @@
 (load "classParser.scm")
 
 ;for handling the state stuff, also loads the carcdrHelpers and the errorHelpers
-(load "state.scm")
+(load "stateHelpers.scm")
 
 
 
@@ -21,8 +21,9 @@
    (call/cc
      (lambda (return)
        (eval-main (interpret-functions (parser file) (new-environment)) return
-                              (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
-                                  (lambda (v env) (myerror "Uncaught exception thrown"))) ))))
+          (lambda (env) (myerror "Break used outside of loop"))
+          (lambda (env) (myerror "Continue used outside of loop"))
+          (lambda (v env) (myerror "Uncaught exception thrown"))) ))))
 
 
 
@@ -250,92 +251,3 @@
       ((eq? '|| (operator expr)) (or op1value (eval-expression (operand2 expr) fname environment)))
       ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) fname environment)))
       (else (myerror "Unknown operator:" (operator expr)))))
-
-
-
-      ;------------------------
-      ; Environment/State Functions
-      ;------------------------
-
-
-; looks up all the values in the list, and returns a list of values
-; ex ((x y z) (1 2 3) is the bound variables in the state
-; input (x y z) returns (1 2 3)
-(define (lookup-list list fname state)
-  (cond
-    ((null? list) '())
-    (else (cons (lookup var fname environment) (lookup-list (cdr list) fname state)))))
-
-; Adds a new (var, val) binding pair into the function defined in fname
-; if we're defining a global variable, put fname = 'global
-(define (insert-binding var val fname state)
-    (if (exists-in-frame? var (get-function fname state))
-        (myerror "error: variable is being re-declared:" var)
-        (replace-function fname (replace-bindings (get-function fname state) (insert-in-frame var val (get-function fname state))) state)))
-
-; insert the var val pair into the given function frame
-(define (insert-in-frame var val frame)
-  (list (cons var (variables (function-bindings frame)))
-        (cons (scheme->language val) (vals (function-bindings frame)))))
-
-
-;bulk updates the ((vars )(vals)) in bindings in the fname state
-;assumes it's a valid bindings
-(define (update-list bindings fname state)
-  (cond
-    ((null? (car bindings)) state)
-    (else (update (caar bindings) (cadr bindings) fname (update-list (list (cdar bindings)(cddr bindings)) fname state)))))
-
-
-; Changes the binding of a variable to a new value in the environment
-; gives an error if the variable does not exist already
-; to change global variable, put 'global as the fname
-; returns the new state with this update
-; looks in the given funciton, and if the value isn't found it recurses on the parent functions until it finds the variable, and updates it
-(define (update var val fname state)
-  (cond
-    ((null? state) (begin '()
-                    (update-in-parent var val fname state)))
-    ((and (exists-in-frame? var (top-frame state))
-          (equal? fname (function-name (top-frame state))))
-            ;we're in the right function frame
-      (replace-function 'fname (update-in-frame var val (top-frame state)) state))
-    (else (cons (top-frame state) (update var val fname (remaining-frames state))))))
-
-
-(define (update-in-parent var val fname state)
-  (cond
-    ((and (equal? 'global (function-name (top-frame state)))
-          (not (exists-in-frame? var (top-frame state))))
-      ;we're in the global frame and the var still isn't found
-      (myerror "error: variable used but not defined: " var))
-    (else (update var val (funciton-parent) state))))
-
-; Changes the binding of a variable in the frame to a new value
-; returns the updated frame
-(define (update-in-frame var val frame)
-  (replace-bindings frame (replace-varval-pair var val (variables (function-bindings frame)) (vals (function-bindings frame)))))
-
-
-
-
-; helper for insert to reconstruct the state after insertion
-(define (replace-bindings frame newbindings)
-  (list (function-name frame) (function-parent frame) (function-parameters frame) (function-body frame) newbindings))
-
-;helper for insert to reconstruct the state after insertion
-(define (replace-function old-function-name new-frame state)
-  (cond
-    ((null? state) '())
-    ((equal? old-function-name (function-name (top-frame state)))
-     (cons new-frame (remaining-frames state)))
-    (else (cons (top-frame state) (replace-function old-function-name new-frame (remaining-frames state))))))
-
-; adds the list of bindings to the given function in the state
-; binding list is ((vars)(vals))
-; returns the overall state
-(define (insert-binding-list newbindings fname state)
-  (cond
-    ((null? newbindings) state)
-    (else insert-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) fname
-      (insert-binding (car (variables newbindings)) (car (vals newbindings)) fname state))))

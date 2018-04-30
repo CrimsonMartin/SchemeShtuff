@@ -59,9 +59,18 @@
 (define (variables bindings) (car bindings))
 (define (vals bindings) (cadr bindings))
 
-; class: (classname parentclass (instancefields) (functions) (constructors))
+; class: (classname parentclass (instancebindings) (functions) (constructors))
 (define (class-name frame) (car frame))
 (define (class-parent frame) (cadr frame))
 (define (class-instancefields frame) (caddr frame))
-(define (class-functions frame) (cadddr frame))
-(define (class-constructors frame) (cadddr (cdr frame)))
+(define (class-staticfields frame) (cadddr frame))
+(define (class-functions frame) (cadddr (cdr frame)))
+(define (class-constructors frame) (cadddr (cddr frame)))
+
+
+; Changes a variable binding by placing the new value in the appropriate place in the values
+; returns the new updated bindings
+(define (replace-varval-pair var val varlist vallist)
+    (cond
+      ((eq? var (car varlist)) (list varlist (cons (scheme->language val) (cdr vallist))))
+      (else (add-pair (car varlist) (car vallist) (replace-varval-pair var val (cdr varlist) (cdr vallist))))))
