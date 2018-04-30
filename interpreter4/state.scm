@@ -1,30 +1,30 @@
 ;designed for R5S5 scheme
-(load "miscHelpers.scm")
+(load "errorHelpers.scm")
+(load "carcdrHelpers.scm")
+(load "errorHelpers.scm")
+
+
+
+;------------------------
+; Environment/State Functions
+;------------------------
+
 
 ; some abstractions
 (define (add-frame newframe state) (cons newframe state))
-(define top-frame car)
-(define remaining-frames cdr)
 
 (define (new-bindings) '(()()))
-(define (variables bindings) (car bindings))
-(define (vals bindings) (cadr bindings))
+
 (define (add-pair var val  bindings)
 (list (cons var (variables bindings)) (cons val (vals bindings))))
 
+; Changes a variable binding by placing the new value in the appropriate place in the values
+; returns the new updated bindings
+(define (replace-varval-pair var val varlist vallist)
+    (cond
+      ((eq? var (car varlist)) (list varlist (cons (scheme->language val) (cdr vallist))))
+      (else (add-pair (car varlist) (car vallist) (replace-varval-pair var val (cdr varlist) (cdr vallist))))))
 
-; class: (classname parentclass (instancefields) (functions) (constructors))
-(define (class-name frame) (car frame))
-(define (class-parent frame) (cadr frame))
-(define (class-instancefields frame) (caddr frame))
-(define (class-functions frame) (cadddr frame))
-(define (class-constructors frame) (cadddr (cdr frame)))
-
-; function: (name (parameters) (body) (closure))
-(define (function-name closure) (car closure))
-(define (function-parameters closure)(cadr closure))
-(define (function-body closure)(caddr closure))
-(define (function-bindings closure)(cadddr closure))
 
 
 (define (new-class name parent instancefields funcitons constructors)
@@ -70,7 +70,8 @@
   (else (cons (top-frame classfunctions) (get-all-other-function fname (remaining-frames classfunctions))))))
 
 
-
+(define (replace-function oldfunction-name newfunction class-frame)
+()
 
 ; Looks up a value in the environment
 ; Returns an error if the variable does not have a legal value

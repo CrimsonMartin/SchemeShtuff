@@ -14,6 +14,13 @@
     #t)
 
 
+; Determines if two values are equal.  We need a special test because there are both boolean and integer types.
+(define (isequal val1 val2)
+  (if (and (number? val1) (number? val2))
+    (= val1 val2)
+    (eq? val1 val2)))
+    
+
 (define (language->scheme v)
 (cond
   ((eq? v 'false) #f)

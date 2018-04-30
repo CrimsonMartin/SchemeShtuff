@@ -4,10 +4,9 @@
 ;Andrew Mooney ajm230
 
 ;Based on the given solution interpreter2-callcc-no-boxes.scm
-
 (load "classParser.scm")
 
-;for handling the state stuff
+;for handling the state stuff, also loads the carcdrHelpers and the errorHelpers
 (load "state.scm")
 
 
@@ -24,6 +23,23 @@
        (eval-main (interpret-functions (parser file) (new-environment)) return
                               (lambda (env) (myerror "Break used outside of loop")) (lambda (env) (myerror "Continue used outside of loop"))
                                   (lambda (v env) (myerror "Uncaught exception thrown"))) ))))
+
+
+
+(define (interpret-classes input state)
+(cond
+  ((null? input) state)
+  ((eq? (car input) 'class ) (;declare a class))))
+  (else (interpret-classes (cdr input) (interpret-classes (car input) state))))
+
+
+
+
+
+
+
+
+
 
 
 ; reads through the methods and binds all the functions and their closures in the state
@@ -44,9 +60,6 @@
 (define (interpret-bind-function function state)
   (interpret-bind-function-parts (function-formal-name function) (function-formal-params function) (function-formal-body function) state))
 
-(define (function-formal-name f) (car f))
-(define (function-formal-params f) (cadr f))
-(define (function-formal-body f) (caddr f))
 
 ; stores the closure of the function in the current state
 ; returns the updated state
@@ -57,8 +70,6 @@
 ; evaluates for the return value of main function
 (define (eval-main state return break continue throw)
   (interpret-statement-list (function-body (get-function 'main state)) 'global state return break continue throw))
-
-
 
 
 
@@ -73,15 +84,13 @@
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 ; pname is the name of the calling function
-(define interpret-statement-list
-  (lambda (statement-list pname environment return break continue throw)
+(define (interpret-statement-list statement-list pname environment return break continue throw)
     (if (null? statement-list)
         environment
-        (interpret-statement-list (cdr statement-list) pname (interpret-statement (car statement-list) pname environment return break continue throw) return break continue throw))))
+        (interpret-statement-list (cdr statement-list) pname (interpret-statement (car statement-list) pname environment return break continue throw) return break continue throw)))
 
 ; interpret a statement in the environment with continuations for return, break, continue, throw
-(define interpret-statement
-  (lambda (statement pname environment return break continue throw)
+(define (interpret-statement statement pname environment return break continue throw)
     (cond
       ((eq? 'return (statement-type statement)) (interpret-return statement pname environment return))
       ((eq? 'var (statement-type statement)) (interpret-declare statement pname environment))
@@ -95,7 +104,7 @@
       ((eq? 'try (statement-type statement)) (interpret-try statement pname environment return break continue throw))
       ((eq? 'funcall (statement-type statement)) (call/cc ;whenever we're inside a funcall, return brings us back here rather than to the beginning of the function
                                                   (lambda (return) (return (interpret-funcall statement  statement environment return break continue throw)))))
-      (else (myerror "Unknown statement:" (statement-type statement))))))
+      (else (myerror "Unknown statement:" (statement-type statement)))))
 
 
 ; when we evaluate a function, we need to pass back the parameters that were input into the function into the parent function's bindings- update them
@@ -118,9 +127,8 @@
                    return break continue throw))
 
 ; Calls the return continuation with the given expression value
-(define interpret-return
-  (lambda (statement fname environment return)
-    (return (eval-expression (get-expr statement) fname environment))))
+(define (interpret-return statement fname environment return)
+    (return (eval-expression (get-expr statement) fname environment)))
 
 ; Adds a new variable binding to the environment.  There may be an assignment with the variable
 (define (interpret-declare statement pname environment)
@@ -243,61 +251,11 @@
       ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) fname environment)))
       (else (myerror "Unknown operator:" (operator expr)))))
 
-; Determines if two values are equal.  We need a special test because there are both boolean and integer types.
-(define isequal
-  (lambda (val1 val2)
-    (if (and (number? val1) (number? val2))
-        (= val1 val2)
-        (eq? val1 val2))))
 
 
-;-----------------
-; HELPER FUNCTIONS
-;-----------------
-
-; These helper functions define the operator and operands of a value expression
-(define operator car)
-(define operand1 cadr)
-(define operand2 caddr)
-(define operand3 cadddr)
-
-(define exists-operand2?
-  (lambda (statement)
-    (not (null? (cddr statement)))))
-
-(define exists-operand3?
-  (lambda (statement)
-    (not (null? (cdddr statement)))))
-
-; these helper functions define the parts of the various statement types
-(define statement-type operator)
-(define get-expr operand1)
-(define get-declare-var operand1)
-(define get-declare-value operand2)
-(define exists-declare-value? exists-operand2?)
-(define get-assign-lhs operand1)
-(define get-assign-rhs operand2)
-(define get-condition operand1)
-(define get-then operand2)
-(define get-else operand3)
-(define get-body operand2)
-(define exists-else? exists-operand3?)
-(define get-try operand1)
-(define get-catch operand2)
-(define get-finally operand3)
-
-(define catch-var
-  (lambda (catch-statement)
-    (car (operand1 catch-statement))))
-
-
-(define get-firstelement operator)
-(define get-secondelement operand1)
-
-;------------------------
-; Environment/State Functions
-;------------------------
-
+      ;------------------------
+      ; Environment/State Functions
+      ;------------------------
 
 ; create a new empty environment, with function name 'global
 (define (new-environment)
@@ -379,12 +337,6 @@
 (define (update-in-frame var val frame)
   (replace-bindings frame (replace-varval-pair var val (variables (function-bindings frame)) (vals (function-bindings frame)))))
 
-; Changes a variable binding by placing the new value in the appropriate place in the values
-; returns the new updated bindings
-(define (replace-varval-pair var val varlist vallist)
-    (cond
-      ((eq? var (car varlist)) (list varlist (cons (scheme->language val) (cdr vallist))))
-      (else (add-pair (car varlist) (car vallist) (replace-varval-pair var val (cdr varlist) (cdr vallist))))))
 
 
 
@@ -408,7 +360,3 @@
     ((null? newbindings) state)
     (else insert-binding-list (list (cdr (variables newbindings)) (cdr (vals newbindings))) fname
       (insert-binding (car (variables newbindings)) (car (vals newbindings)) fname state))))
-
-;global is the function name in the last frame of the state, so same as getting the function 'global
-(define (get-global-closure state)
-  (get-function 'global state))
