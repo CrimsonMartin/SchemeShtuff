@@ -257,27 +257,6 @@
       ; Environment/State Functions
       ;------------------------
 
-; create a new empty environment, with function name 'global
-(define (new-environment)
-  (list (new-function-frame 'global)))
-
-
-
-(define (push-frame environment)
-  (push-function-frame 'block environment))
-
-; add a frame onto the top of the environment
-(define (push-function-frame name environment)
-    (cons (new-function-frame name) environment))
-
-;adds the given function to the state with empty bindings
-(define (add-function-frame fname parentname params body state)
-  (cons (list fname parentname params body (new-bindings) state)))
-
-; remove a frame from the environment
-(define (pop-function-frame environment)
-    (remaining-frames environment))
-
 
 ; looks up all the values in the list, and returns a list of values
 ; ex ((x y z) (1 2 3) is the bound variables in the state

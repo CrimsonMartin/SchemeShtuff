@@ -1,8 +1,6 @@
 ;designed for R5S5 scheme
 (load "errorHelpers.scm")
 (load "carcdrHelpers.scm")
-(load "errorHelpers.scm")
-
 
 
 ;------------------------
@@ -13,7 +11,11 @@
 ; some abstractions
 (define (add-frame newframe state) (cons newframe state))
 
+(define (pop-function-frame environment) (remaining-frames environment))
+(define (push-frame environment) (push-function-frame 'block environment))
+
 (define (new-bindings) '(()()))
+(define (new-environment) '()) ;TODO might need to change this, depending on how we work the state
 
 (define (add-pair var val  bindings)
 (list (cons var (variables bindings)) (cons val (vals bindings))))
@@ -41,27 +43,19 @@
 (exists-in-list? var (class-instancefields  cframe)))
 
 
-(define (get-class cname state)
-(cond
-  ((null? state) (myerror "error: class not defined- " cname))
-  ((eq? (class-name (top-frame state)) cname) (top-frame state))
-  (else (get-class cname (remaining-frames state)))))
-
 (define (get-function fname classfunctions)
 (cond
   ((null? classfunctions) (myerror "error: function not defined- " functionname))
   ((equal? fname (function-name (top-frame state))) (top-frame classfunctions))
   (else (get-function fname (remaining-frames classfunctions)))
 
+  (define (get-class cname state)
+  (cond
+    ((null? state) (myerror "error: class not defined- " cname))
+    ((eq? (class-name (top-frame state)) cname) (top-frame state))
+    (else (get-class cname (remaining-frames state)))))
 
-;how to reconstruct the state and function frames
-(define (get-all-other-class cname state)
-(cond
-  ((null? state) (myerror "error: class not defined- " cname))
-  ((equal? cname (class-name (top-frame state)))
-    (remaining-frames state))
-  (else (cons (top-frame state) (get-all-other-class cname (remaining-frames state))))))
-
+;used to reconstruct the state and function frames
 (define (get-all-other-function fname classfunctions)
 (cond
   ((null? classfunctions) (myerror "error: function not defined- " fname))
@@ -69,9 +63,22 @@
     (remaining-frames classfunctions))
   (else (cons (top-frame classfunctions) (get-all-other-function fname (remaining-frames classfunctions))))))
 
+(define (get-all-other-class cname state)
+(cond
+  ((null? state) (myerror "error: class not defined- " cname))
+  ((equal? cname (class-name (top-frame state)))
+  (remaining-frames state))
+  (else (cons (top-frame state) (get-all-other-class cname (remaining-frames state))))))
+
+
 
 (define (replace-function oldfunction-name newfunction class-frame)
-()
+(append (newfunction (get-all-other-function oldfunction-name (class-functions class-frame)))))
+
+(define (replace-class oldclass-name newclass state)
+(append (newclass (get-all-other-class oldclass-name state))))
+
+
 
 ; Looks up a value in the environment
 ; Returns an error if the variable does not have a legal value

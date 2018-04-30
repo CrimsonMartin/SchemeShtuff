@@ -45,6 +45,7 @@
 (define top-frame car)
 (define remaining-frames cdr)
 
+
 ; function: (name (parameters) (body) (closure))
 (define (function-name closure) (car closure))
 (define (function-parameters closure)(cadr closure))
@@ -57,7 +58,6 @@
 
 (define (variables bindings) (car bindings))
 (define (vals bindings) (cadr bindings))
-
 
 ; class: (classname parentclass (instancefields) (functions) (constructors))
 (define (class-name frame) (car frame))
