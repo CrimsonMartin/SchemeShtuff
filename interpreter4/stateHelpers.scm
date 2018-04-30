@@ -114,26 +114,27 @@
     (remaining-frames state))
   (else (cons (top-frame state) (get-all-other-class cname (remaining-frames state))))))
 
-
+;returns the new env
 (define (replace-function oldfunction-name newfunction-frame classname env)
-(list (stack env) (replace-function-in-class oldfunction-name newfunction-frame (get-class classname env))))
+(list (stack env) (add-frame (replace-function-in-class oldfunction-name newfunction-frame (get-class classname env))
+  (get-all-other-class classname (state env)))))
 
+;returns the new class frame
 (define (replace-function-in-class oldfunction-name newfunction-frame class-frame)
 (cond
-  ()(not (null? (get-function-from-frame oldfunction-name (class-static-functions class-frame)))
-
-(addframe newfunction-frame (get-all-other-function oldfunction-name (class-instance-functions class-frame))))
-
+  ((is-static-fn? oldfunction-name class-frame) (add-frame newfunction-frame
+    (get-all-other-function oldfunction-name (class-static-functions class-frame))))
+  (else (add-frame newfunction-frame (get-all-other-function oldfunction-name (class-instance-functions class-frame))))))
 
 
 (define (replace-class oldclass-name newclass-frame env)
-(replace-class oldclass-name newclass-frame (state env)))
+(list (stack env) (replace-class-in-state oldclass-name newclass-frame (state env))))
 
 (define (replace-class-in-state oldclass-name newclass-frame state)
 (addframe newclass-frame (get-all-other-class oldclass-name state)))
 
 
-
+; everything below here 
 
 ;needs to look in the function, then parent functions, then in the class field (don't worry about super, since if we super. then just call exists on the class parent instead of this class)
 (define (exists? var function class state)
