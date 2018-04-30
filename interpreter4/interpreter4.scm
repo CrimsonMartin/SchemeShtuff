@@ -42,6 +42,21 @@
 (add-class name parent (parse-instancefields body) (parse-staticfields body) (parse-instancefunctions body) (parse-staticfunctions) (no-constructors) (state env) )))
 
 
+;takes the body of a class and breaks it down into it's pieces for easier acccess
+(define (parse-instancefields body)
+)
+
+(define (parse-staticfields body)
+)
+
+(define (parse-instancefunctions body)
+)
+
+(define (parse-staticfunctions body)
+)
+
+
+
 
 
   ;where initialFieldValues are non static variables and fieldValues are static varibales both static and non static methods are stored in the methodNames/Closures
