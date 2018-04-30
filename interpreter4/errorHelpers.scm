@@ -14,6 +14,7 @@
 
 
 ; Determines if two values are equal.  We need a special test because there are both boolean and integer types.
+;TODO write == for objects
 (define (isequal val1 val2)
   (if (and (number? val1) (number? val2))
     (= val1 val2)

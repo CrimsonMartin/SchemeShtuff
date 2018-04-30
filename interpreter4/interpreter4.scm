@@ -20,7 +20,7 @@
   (scheme->language
    (call/cc
      (lambda (return)
-       (eval-main (interpret-functions (parser file) (new-environment)) return
+       (eval-main (interpret-classes (parser file) (new-environment)) return
           (lambda (env) (myerror "Break used outside of loop"))
           (lambda (env) (myerror "Continue used outside of loop"))
           (lambda (v env) (myerror "Uncaught exception thrown"))) ))))
@@ -30,7 +30,7 @@
 (define (interpret-classes input state)
 (cond
   ((null? input) state)
-  ((eq? (car input) 'class ) (;declare a class))))
+  ((eq? (car input) 'class ) (decideStateClass (classBody l)(add (className l) (makeClass l state) state) (className l) (lambda (v) v) (lambda (v) (v)) (lambda (v) v) (lambda (v) v)(lambda (v) v)))
   (else (interpret-classes (cdr input) (interpret-classes (car input) state))))
 
 

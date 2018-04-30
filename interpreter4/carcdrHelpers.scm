@@ -42,30 +42,34 @@
 (define get-secondelement operand1)
 
 ; These helper functions are for interpreting states
-(define top-frame car)
-(define remaining-frames cdr)
+(define (top-frame l) car l)
+(define (remaining-frames l) cdr l)
 
+(define (vars bindings) (car bindings))
+(define (vals bindings) (cadr bindings))
 
-; function: (name (parameters) (body) (closure))
-(define (function-name closure) (car closure))
-(define (function-parameters closure)(cadr closure))
-(define (function-body closure)(caddr closure))
-(define (function-bindings closure)(cadddr closure))
+(define (stack env) (car env))
+(define (state env) (cadr env))
+
+; function: (name parent (parameters) (body) (closure))
+(define (function-name frame) (car frame))
+(define (function-parent frame) (cadr frame))
+(define (function-parameters frame)(caddr frame))
+(define (function-body frame)(cadddr frame))
+(define (function-bindings frame)(cadddr (cdr frame)))
 
 (define (function-formal-name f) (car f))
 (define (function-formal-params f) (cadr f))
 (define (function-formal-body f) (caddr f))
 
-(define (variables bindings) (car bindings))
-(define (vals bindings) (cadr bindings))
-
-; class: (classname parentclass (instancebindings) (functions) (constructors))
+; class: (classname parentclass (instancefields) (staticfields) (instance functions) (static functions) (constructors))
 (define (class-name frame) (car frame))
 (define (class-parent frame) (cadr frame))
-(define (class-instancefields frame) (caddr frame))
-(define (class-staticfields frame) (cadddr frame))
-(define (class-functions frame) (cadddr (cdr frame)))
-(define (class-constructors frame) (cadddr (cddr frame)))
+(define (class-instance-fields frame) (caddr frame))
+(define (class-static-fields frame) (cadddr frame))
+(define (class-instance-functions frame) (cadddr (cdr frame)))
+(define (calss-static-functions frame) (cadddr (cddr frame)))
+(define (class-constructors frame) (cadddr (cdddr frame)))
 
 
 ; Changes a variable binding by placing the new value in the appropriate place in the values
