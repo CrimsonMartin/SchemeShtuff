@@ -23,6 +23,9 @@
 ; return the environment with a frame removed from the stack
 (define (pop-frame env) (list (remainingframes (stack env)) (state env)))
 (define (push-frame env) (list (add-frame (new-stack-frame) (stack env)) (state env)))
+; push a given frame onto the stack
+(define (add-instance-frame frame env) (list (add-frame frame (stack env)) (state env)))
+
 
 
 
@@ -45,67 +48,89 @@
 (list name parent params body bindings))
 
 
-;create the new class and add it to the state
+; create the new class and add it to the state
 (define (add-class name parent instancefields staticfields instancefunctions staticfunctions constructors state)
-(add-frame (new-class name parent instancefields staticfields instancefunctions staticfunctions constructors)) state)
+(add-frame (list new-class name parent instancefields staticfields instancefunctions staticfunctions constructors) state)
 
 (define (add-function name parent params body bindings classfunctions)
-(add-frame (new-function name parent params body bindings) classfunctions))
+(add-frame (list new-function name parent params body bindings) classfunctions))
 
 
 (define (exists-in-function? var fframe)
-(exists-in-list? var (variables (function-bindings fframe))))
+(exists-in-list? var (vars (function-bindings fframe))))
+
+(define (is-static-vbl? var cframe)
+(exists-in-list? var (vars (class-static-fields cframe))))
+
+(define (is-static-fn? fname cframe)
+(null? (get-function-from-frame fname (class-static-functions cframe))))
 
 (define (exists-in-class? var cframe)
-(or (exists-in-list? var (class-instancefields cframe))
-    (exists-in-list? var (class-staticfields cframe))))
+(or (exists-in-list? var (vars (class-instance-fields cframe)))
+    (exists-in-list? var (vars (class-static-fields cframe)))))
 
 
-(define (get-function fname class state)
+; returns formal binding of the function fname in the given class in the environment
+(define (get-function fname class env)
 (cond
-  ((not (null? (get-function-from-frame fname (class-instancefunctions (get-class class state)))))
-    (get-function-from-frame fname (class-instancefunctions (get-class class state))))
-  ((not (null? (get-function-from-frame fname (class-staticfunctions (get-class class state)))))
-    (get-function-from-frame fname (class-staticfunctions (get-class class state))))
+  ((not (null? (get-function-from-frame fname (class-instancefunctions (get-class class env)))))
+    (get-function-from-frame fname (class-instancefunctions (get-class class env))))
+  ((not (null? (get-function-from-frame fname (class-staticfunctions (get-class class env)))))
+    (get-function-from-frame fname (class-staticfunctions (get-class class env))))
   (else (myerror "error: function undefined- " fname))))
 
 (define (get-function-from-frame fname classfunctions)
 (cond
   ((null? classfunctions) NULL)
-  ((equal? fname (function-name (top-frame state))) (top-frame classfunctions))
-  (else (get-function fname (remaining-frames classfunctions)))
+  ((eq? fname (function-name (top-frame state))) (top-frame classfunctions))
+  (else (get-function-from-frame fname (remaining-frames classfunctions)))))
 
 
-(define (get-class cname state)
+; returns the formal binding of the class in the environment
+(define (get-class cname env)
 (cond
-  ((null? state) (myerror "error: class not defined- " cname))
-  ((eq? (class-name (top-frame state)) cname) (top-frame state))
-  (else (get-class cname (remaining-frames state)))))
+  ((null? (get-class-from-state cname (state env))) (myerror "error: class not defined- " cname))
+  (else (get-class-from-state cname (state env)))))
+
+(define (get-class-from-state cname state)
+(cond
+  ((null? state) NULL)
+  ((eq? cname (class-name (top-frame state))) (top-frame state))
+  (else (get-class-from-state cname (remaining-frames state)))))
+
 
 ;used to reconstruct the state and function frames
 (define (get-all-other-function fname classfunctions)
 (cond
-  ((null? classfunctions) (myerror "error: function not defined- " fname))
+  ((null? classfunctions) NULL)
   ((equal? fname (function-name (top-frame classfunctions)))
     (remaining-frames classfunctions))
   (else (cons (top-frame classfunctions) (get-all-other-function fname (remaining-frames classfunctions))))))
 
 (define (get-all-other-class cname state)
 (cond
-  ((null? state) (myerror "error: class not defined- " cname))
+  ((null? state) NULL)
   ((equal? cname (class-name (top-frame state)))
-  (remaining-frames state))
+    (remaining-frames state))
   (else (cons (top-frame state) (get-all-other-class cname (remaining-frames state))))))
 
 
-(define (replace-function oldfunction-name newfunction-frame class-frame)
-(addframe newfunction-frame (get-all-other-function oldfunction-name (class-functions class-frame))))
+(define (replace-function oldfunction-name newfunction-frame classname env)
+(list (stack env) (replace-function-in-class oldfunction-name newfunction-frame (get-class classname env))))
 
-(define (replace-class oldclass-name newclass-frame state)
+(define (replace-function-in-class oldfunction-name newfunction-frame class-frame)
+(cond
+  ()(not (null? (get-function-from-frame oldfunction-name (class-static-functions class-frame)))
+
+(addframe newfunction-frame (get-all-other-function oldfunction-name (class-instance-functions class-frame))))
+
+
+
+(define (replace-class oldclass-name newclass-frame env)
+(replace-class oldclass-name newclass-frame (state env)))
+
+(define (replace-class-in-state oldclass-name newclass-frame state)
 (addframe newclass-frame (get-all-other-class oldclass-name state)))
-
-
-
 
 
 

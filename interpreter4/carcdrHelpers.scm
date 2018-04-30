@@ -68,7 +68,7 @@
 (define (class-instance-fields frame) (caddr frame))
 (define (class-static-fields frame) (cadddr frame))
 (define (class-instance-functions frame) (cadddr (cdr frame)))
-(define (calss-static-functions frame) (cadddr (cddr frame)))
+(define (class-static-functions frame) (cadddr (cddr frame)))
 (define (class-constructors frame) (cadddr (cdddr frame)))
 
 
