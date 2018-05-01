@@ -52,12 +52,18 @@
 (define (stack env) (car env))
 (define (state env) (cadr env))
 
+;stack frames: ('class/'try/'function 'classtype/'try/functionname (vars)(vals))
+(define (frame-type frame) (cadr frame))
+(define (frame-vars frame)(caddr frame))
+(define (frame-vals frame) (cadddr frame))
+
 ; function: (name parent (parameters) (body) (closure))
 (define (function-name frame) (car frame))
 (define (function-parent frame) (cadr frame))
 (define (function-parameters frame)(caddr frame))
 (define (function-body frame)(cadddr frame))
 (define (function-bindings frame)(cadddr (cdr frame)))
+(define (function-compiletype frame)(cadddr (cddr frame)))
 
 (define (function-formal-name f) (car f))
 (define (function-formal-params f) (cadr f))

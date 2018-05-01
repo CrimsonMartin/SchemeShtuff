@@ -13,7 +13,6 @@
 ; and instance functions is: (function1 function2 ...)
 ; accessing this stuff is in carcdrHelpers.scm
 
-
 ; our thing works on a stack and state system: ((stack)(state))
 ; where the stack is where you push and pop function frames, as need in try/catch, function execution, instances, etc.
 ; and state is where we declare all the classes and their stuff, as well as functions in each class, etc.
@@ -33,7 +32,7 @@
 
 (define (new-bindings) '(()()))
 (define (new-environment) '(()()))
-(define (new-stack-frame) '(()()))
+(define (new-stack-frame) '(class type ()()))
 
 (define (add-pair var val  bindings)
 (list (cons var (variables bindings)) (cons val (vals bindings))))
@@ -157,8 +156,8 @@
 
 (define (lookup-in-frame var stackframe)
 (cond
-  ((not (zero? (indexof var (vars stackframe))))
-    (get-value (indexof var (vars stackframe)) (vals stackframe)))
+  ((not (zero? (indexof var (frame-vars stackframe))))
+    (get-value (indexof var (frame-vars stackframe)) (frame-vals stackframe)))
   (else NULL)))
 
 
@@ -191,3 +190,16 @@
     ((null? list) NULL)
     (else (cons (lookup (car list) function class env)
       (lookup-list (cdr list) function class env)))))
+
+
+;gets the function's compile time type given function in the environment
+;reads through the stack until it finds a class frame, then it gets the type of that class
+;used for instantiating this. in function calls
+(define (get-runtype env)
+(cond
+  ((null? (stack env)) NULL)
+  ((is-classframe? (top-stack-frame env)) (frametype (top-stack-frame env)))
+  (else (get-runtype (pop-frame env))))
+
+(define (is-classframe? stackframe)
+  (eq? 'class (frametype stackframe)))
