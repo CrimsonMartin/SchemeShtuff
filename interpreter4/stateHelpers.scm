@@ -195,7 +195,7 @@
 
 ; Adds a new (var, val) binding pair into the function defined in fname
 ; if we're defining a global variable, put fname = 'global
-(define (insert-binding var val fname class state)
+(define (insert-binding var val fname class env)
     (if (exists-in-frame? var (get-function fname state))
         (myerror "error: variable is being re-declared:" var)
         (replace-function fname (replace-bindings (get-function fname state) (insert-in-frame var val (get-function fname state))) state)))

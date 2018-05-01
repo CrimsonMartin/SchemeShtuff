@@ -39,21 +39,46 @@
 ;returns the env after declaring the class in the env
 (define (interpret-declare-class name parent body env)
 (list (stack env)
-(add-class name parent (parse-instancefields body) (parse-staticfields body) (parse-instancefunctions body) (parse-staticfunctions) (no-constructors) (state env) )))
+(add-class name parent
+  (parse-instancefields body)
+  (parse-staticfields body)
+  (parse-instancefunctions body)
+  (parse-staticfunctions)
+  (parse-constructors body) (state env) )))
+
 
 
 ;takes the body of a class and breaks it down into it's pieces for easier acccess
-(define (parse-instancefields body)
+(define (parse-instancefields function class body)
+(cond
+  ((null? body) (new-bindings))
+  ((eq? 'var (operator body)) (parse-instancefields function )))
 )
 
-(define (parse-staticfields body)
+;assuming that static fields can't be initialized to 'novalue (since we don't have fancy constructors, they would never get initialized)
+(define (parse-staticfields function class body)
+(cond
+  ((null? body) (new-bindings))
+  ((eq? 'static-var (operator body)) parse-staticfields (insert-binding var val fname class env)
 )
 
-(define (parse-instancefunctions body)
+(define (parse-instancefunctions function class body)
+(cond
+  ((null? body) NULL)
+  ((eq? 'function (operator body))
+    (operand1 body) (operand2 body)
+    (cons (parse-function 
 )
 
-(define (parse-staticfunctions body)
+(define (parse-staticfunctions function class body)
+(cond
+  ((null? )))
 )
+
+(define (parse-constructors function class body)
+;change this if we decide to implement strange constructors
+  (no-constructors))
+
 
 
 
