@@ -99,16 +99,16 @@
 ; reads through the methods and binds all the functions and their closures in the state
 ; returns the resulting state
 ; the environment from each step is used by the next one
-(define (interpret-functions input environment)
+(define (interpret-functions input compiletime-type environment)
   (cond
     ((null? input) environment)
     ((and (eq? 'var (statement-type input)) (not (exists-operand2? input))); (var x)
-     (insert (operand1 input) 'novalue 'global environment))
+     (insert (operand1 input) 'novalue 'global compiletime-type environment))
     ((and (eq? 'var (statement-type input)) (exists-operand2? input)); (var x 10)
-     (insert-binding (operand1 input) (operand2 input) 'global environment))
+     (insert-binding (operand1 input) (operand2 input) 'global compiletime-type environment))
     ((equal? 'function (statement-type input)) ;function decleration
-      (interpret-bind-function (cdr input) environment))
-    ((list? (car input)) (interpret-functions (cdr input) (interpret-functions (car input) environment)  ))
+      (interpret-bind-function (cdr input) compiletime-type environment))
+    ((list? (car input)) (interpret-functions (cdr input) (interpret-functions (car input) compiletime-type environment)  ))
     (else (myerror "illegal global declaration"))))
 
 (define (interpret-bind-function function state)
@@ -129,35 +129,35 @@
 
 ; returns the function environment, with variables evaluated in the state
 ; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
-(define (add-bindings formal-params actual-params function-environment state)
+(define (add-bindings formal-params actual-params compiletime-type function-environment state)
   (if (not(is-compatible-param-list formal-param actual-param state))
       (myerror "parameter mismatch : formal parameters should be " formal-params)
-      (add-param-bindings formal-params actual-params function-environment state)))
+      (add-param-bindings formal-params actual-params compiletime-type function-environment state)))
 
 
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 ; pname is the name of the calling function
-(define (interpret-statement-list statement-list pname environment return break continue throw)
+(define (interpret-statement-list statement-list pname compiletime-type environment return break continue throw)
     (if (null? statement-list)
         environment
-        (interpret-statement-list (cdr statement-list) pname (interpret-statement (car statement-list) pname environment return break continue throw) return break continue throw)))
+        (interpret-statement-list (cdr statement-list) pname (interpret-statement (car statement-list) pname compiletime-type environment return break continue throw) return break continue throw)))
 
 ; interpret a statement in the environment with continuations for return, break, continue, throw
-(define (interpret-statement statement pname environment return break continue throw)
+(define (interpret-statement statement pname compiletime-type environment return break continue throw)
     (cond
-      ((eq? 'return (statement-type statement)) (interpret-return statement pname environment return))
-      ((eq? 'var (statement-type statement)) (interpret-declare statement pname environment))
-      ((eq? '= (statement-type statement)) (interpret-assign statement pname environment))
-      ((eq? 'if (statement-type statement)) (interpret-if statement pname environment return break continue throw))
-      ((eq? 'while (statement-type statement)) (interpret-while statement pname environment return throw))
-      ((eq? 'continue (statement-type statement)) (continue pname environment))
-      ((eq? 'break (statement-type statement)) (break pname environment))
-      ((eq? 'begin (statement-type statement)) (interpret-block statement pname environment return break continue throw))
-      ((eq? 'throw (statement-type statement)) (interpret-throw statement pname environment throw))
-      ((eq? 'try (statement-type statement)) (interpret-try statement pname environment return break continue throw))
+      ((eq? 'return (statement-type statement)) (interpret-return statement pname compiletime-type environment return))
+      ((eq? 'var (statement-type statement)) (interpret-declare statement pname compiletime-type environment))
+      ((eq? '= (statement-type statement)) (interpret-assign statement pname compiletime-type environment))
+      ((eq? 'if (statement-type statement)) (interpret-if statement pname compiletime-type environment return break continue throw))
+      ((eq? 'while (statement-type statement)) (interpret-while statement pname compiletime-type environment return throw))
+      ((eq? 'continue (statement-type statement)) (continue pname compiletime-type environment))
+      ((eq? 'break (statement-type statement)) (break pname compiletime-type environment))
+      ((eq? 'begin (statement-type statement)) (interpret-block statement pname compiletime-type environment return break continue throw))
+      ((eq? 'throw (statement-type statement)) (interpret-throw statement pname compiletime-type environment throw))
+      ((eq? 'try (statement-type statement)) (interpret-try statement pname compiletime-type environment return break continue throw))
       ((eq? 'funcall (statement-type statement)) (call/cc ;whenever we're inside a funcall, return brings us back here rather than to the beginning of the function
-                                                  (lambda (return) (return (interpret-funcall statement  statement environment return break continue throw)))))
+                                                  (lambda (return) (return (interpret-funcall statement  statement compiletime-type environment return break continue throw)))))
       (else (myerror "Unknown statement:" (statement-type statement)))))
 
 
@@ -169,50 +169,50 @@
 ;     - automatically updates the variables wherever they need to be on an equals, since update goes up the call tree until the variable is defined
 ; 4: pass the modified function bindings back to the parent function recursively, until it updates wherever they are defined
 ; 5: return the value of the return continuation in the function (if it exists- if not, just do 4)
-(define (interpret-funcall statement fname environment return break continue throw)
- ; (length (function-parameters (get-function fname environment)))
+(define (interpret-funcall statement fname compiletime-type environment return break continue throw)
+ ; (length (function-parameters (get-function fname compiletime-type environment)))
 
 
   ;returns the state after the function body has been executed
-           (interpret-statement-list (function-body (get-funciton fname environment)) fname
-                   (insert-binding-list (list (function-params (get-function fname environment))
-                                              (lookup-list (function-params (get-function fname environment)) fname state))
-                       fname environment)
+           (interpret-statement-list (function-body (get-funciton fname compiletime-type environment)) fname
+                   (insert-binding-list (list (function-params (get-function fname compiletime-type environment))
+                                              (lookup-list (function-params (get-function fname compiletime-type environment)) fname state))
+                       fname compiletime-type environment)
                    return break continue throw))
 
 ; Calls the return continuation with the given expression value
-(define (interpret-return statement fname environment return)
-    (return (eval-expression (get-expr statement) fname environment)))
+(define (interpret-return statement fname compiletime-type environment return)
+    (return (eval-expression (get-expr statement) fname compiletime-type environment)))
 
 ; Adds a new variable binding to the environment.  There may be an assignment with the variable
-(define (interpret-declare statement pname environment)
+(define (interpret-declare statement pname compiletime-type environment)
     (if (exists-declare-value? statement)
-        (insert-binding (get-declare-var statement) (eval-expression (get-declare-value statement) pname environment) pname environment)
-        (insert-binding (get-declare-var statement) 'novalue pname environment)))
+        (insert-binding (get-declare-var statement) (eval-expression (get-declare-value statement) pname compiletime-type environment) pname compiletime-type environment)
+        (insert-binding (get-declare-var statement) 'novalue pname compiletime-type environment)))
 
 ; Updates the environment to add an new binding for a variable
-(define (interpret-assign statement pname environment)
-    (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) pname environment) pname environment))
+(define (interpret-assign statement pname compiletime-type environment)
+    (update (get-assign-lhs statement) (eval-expression (get-assign-rhs statement) pname compiletime-type environment) pname compiletime-type environment))
 
 ; We need to check if there is an else condition.  Otherwise, we evaluate the expression and do the right thing.
-(define (interpret-if statement pname environment return break continue throw)
+(define (interpret-if statement pname compiletime-type environment return break continue throw)
     (cond
-      ((eval-expression (get-condition statement) pname environment) (interpret-statement (get-then statement) pname environment return break continue throw))
-      ((exists-else? statement) (interpret-statement (get-else statement) pname environment return break continue throw))
+      ((eval-expression (get-condition statement) pname compiletime-type environment) (interpret-statement (get-then statement) pname compiletime-type environment return break continue throw))
+      ((exists-else? statement) (interpret-statement (get-else statement) pname compiletime-type environment return break continue throw))
       (else environment)))
 
 ; Interprets a while loop.  We must create break and continue continuations for this loop
-(define (interpret-while statement pname environment return throw)
+(define (interpret-while statement pname compiletime-type environment return throw)
     (call/cc
      (lambda (break)
-       (letrec ((loop (lambda (condition body pname environment)
-                        (if (eval-expression condition pname environment)
-                            (loop condition body (interpret-statement body pname environment return break (lambda (env) (break (loop condition body env))) throw))
-                         environment))))
-         (loop (get-condition statement) (get-body statement) pname environment)))))
+       (letrec ((loop (lambda (condition body pname compiletime-type environment)
+                        (if (eval-expression condition pname compiletime-type environment)
+                            (loop condition body (interpret-statement body pname compiletime-type environment return break (lambda (env) (break (loop condition body env))) throw))
+                         compiletime-type environment))))
+         (loop (get-condition statement) (get-body statement) pname compiletime-type environment)))))
 
 ; Interprets a block.  The break, continue, and throw continuations must be adjusted to pop the environment
-(define (interpret-block statement pname environment return break continue throw)
+(define (interpret-block statement pname compiletime-type environment return break continue throw)
     (pop-function-frame (interpret-statement-list (cdr statement)
                                          pname
                                          (push-frame environment)
@@ -222,14 +222,14 @@
                                          (lambda (v env) (throw v (pop-function-frame env))))))
 
 ; We use a continuation to throw the proper value. Because we are not using boxes, the environment/state must be thrown as well so any environment changes will be kept
-(define (interpret-throw statement pname environment throw)
-    (throw (eval-expression (get-expr statement) pname environment) environment))
+(define (interpret-throw statement pname compiletime-type environment throw)
+    (throw (eval-expression (get-expr statement) pname compiletime-type environment) environment))
 
 ; Interpret a try-catch-finally block
 
 ; Create a continuation for the throw.  If there is no catch, it has to interpret the finally block, and once that completes throw the exception.
 ;   Otherwise, it interprets the catch block with the exception bound to the thrown value and interprets the finally block when the catch is done
-(define (create-throw-catch-continuation catch-statement pname environment return break continue throw jump finally-block)
+(define (create-throw-catch-continuation catch-statement pname compiletime-type environment return break continue throw jump finally-block)
     (cond
       ((null? catch-statement) (lambda (ex env) (throw ex (interpret-block finally-block env return break continue throw))))
       ((not (eq? 'catch (statement-type catch-statement))) (myerror "Incorrect catch statement"))
@@ -246,17 +246,17 @@
 
 ; To interpret a try block, we must adjust  the return, break, continue continuations to interpret the finally block if any of them are used.
 ;  We must create a new throw continuation and then interpret the try block with the new continuations followed by the finally block with the old continuations
-(define (interpret-try statement pname environment return break continue throw)
+(define (interpret-try statement pname compiletime-type environment return break continue throw)
     (call/cc
      (lambda (jump)
        (let* ((finally-block (make-finally-block (get-finally statement)))
               (try-block (make-try-block (get-try statement)))
-              (new-return (lambda (v) (begin (interpret-block finally-block pname environment return break continue throw) (return v))))
+              (new-return (lambda (v) (begin (interpret-block finally-block pname compiletime-type environment return break continue throw) (return v))))
               (new-break (lambda (env) (break (interpret-block finally-block pname env return break continue throw))))
               (new-continue (lambda (env) (continue (interpret-block finally-block pname env return break continue throw))))
-              (new-throw (create-throw-catch-continuation (get-catch statement) pname environment return break continue throw jump finally-block)))
+              (new-throw (create-throw-catch-continuation (get-catch statement) pname compiletime-type environment return break continue throw jump finally-block)))
          (interpret-block finally-block
-                          (interpret-block try-block pname environment new-return new-break new-continue new-throw)
+                          (interpret-block try-block pname compiletime-type environment new-return new-break new-continue new-throw)
                           return break continue throw)))))
 
 ; helper methods so that I can reuse the interpret-block method on the try and finally blocks
@@ -270,37 +270,37 @@
       (else (cons 'begin (cadr finally-statement)))))
 
 ; Evaluates all possible boolean and arithmetic expressions, including constants and variables.
-(define (eval-expression expr fname environment)
+(define (eval-expression expr fname compiletime-type environment)
     (cond
       ((number? expr) expr)
       ((eq? expr 'true) #t)
       ((eq? expr 'false) #f)
-      ((not (list? expr)) (lookup expr fname environment))
-      (else (eval-operator expr fname environment))))
+      ((not (list? expr)) (lookup expr fname compiletime-type environment))
+      (else (eval-operator expr fname compiletime-type environment))))
 
 ; Evaluate a binary (or unary) operator.  Although this is not dealing with side effects, I have the routine evaluate the left operand first and then
 ; pass the result to eval-binary-op2 to evaluate the right operand.  This forces the operands to be evaluated in the proper order in case you choose
 ; to add side effects to the interpreter
-(define (eval-operator expr fname environment)
+(define (eval-operator expr fname compiletime-type environment)
     (cond
-      ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) fname environment)))
-      ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) fname environment)))
-      (else (eval-binary-op2 expr (eval-expression (operand1 expr) fname environment) fname environment))))
+      ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) fname compiletime-type environment)))
+      ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) fname compiletime-type environment)))
+      (else (eval-binary-op2 expr (eval-expression (operand1 expr) fname compiletime-type environment) fname compiletime-type environment))))
 
 ; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation.
-(define (eval-binary-op2 expr op1value fname environment)
+(define (eval-binary-op2 expr op1value fname compiletime-type environment)
     (cond
-      ((eq? '+ (operator expr)) (+ op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '- (operator expr)) (- op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '* (operator expr)) (* op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '/ (operator expr)) (quotient op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '% (operator expr)) (remainder op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '== (operator expr)) (isequal op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '!= (operator expr)) (not (isequal op1value (eval-expression (operand2 expr) fname environment))))
-      ((eq? '< (operator expr)) (< op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '> (operator expr)) (> op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '<= (operator expr)) (<= op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '>= (operator expr)) (>= op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '|| (operator expr)) (or op1value (eval-expression (operand2 expr) fname environment)))
-      ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) fname environment)))
+      ((eq? '+ (operator expr)) (+ op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '- (operator expr)) (- op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '* (operator expr)) (* op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '/ (operator expr)) (quotient op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '% (operator expr)) (remainder op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '== (operator expr)) (isequal op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '!= (operator expr)) (not (isequal op1value (eval-expression (operand2 expr) fname compiletime-type environment))))
+      ((eq? '< (operator expr)) (< op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '> (operator expr)) (> op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '<= (operator expr)) (<= op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '>= (operator expr)) (>= op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '|| (operator expr)) (or op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
+      ((eq? '&& (operator expr)) (and op1value (eval-expression (operand2 expr) fname compiletime-type environment)))
       (else (myerror "Unknown operator:" (operator expr)))))
