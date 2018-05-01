@@ -80,10 +80,10 @@
 ; state already has main declared in body
 ; evaluates for the return value of main function
 (define (eval-main class env return break continue throw)
-  (interpret-statement-list (function-body (get-function 'main (get-class class env)))
+  (interpret-statement-list (function-body (get-function 'main class env))
   class env return break continue throw))
 
-  
+
 
 ; returns the function environment, with variables evaluated in the state
 ; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
@@ -249,13 +249,13 @@
 ; evaluate a dot operator
 (define (eval-dot expr fname compiletime-type environment)
   (cond
-      ((eq? 'var (operand1 expr)) environment)
-      ((eq? 'function (operand1 expr)) environment)
-      ((eq? 'new (operand1 expr)) environment)
-      ((eq? 'this (operand1 expr)) environment)
-      ((eq? 'super (operand1 expr)) environment)
-      ((eq? 'class (operand1 expr)) environment)
-      ))
+      ((eq? 'var (operator expr)) (interpret-declare expr fname compiletime-type environment))
+      ((eq? 'fun-call (operator expr)) environment); evaluate the current type for the function, then execute the body of that function
+      ((eq? 'new (operator expr)) (interpret-statement-list (add-instance-frame frame environment)
+      ((eq? 'this (operator expr)) environment); add the this. to the instance binding, then execute rest
+      ((eq? 'super (operator expr)) environment); lookup the class parent in env, then evaluate rhs in the env, then execute
+      ((eq? 'class (operator expr)) environment); call static method from the lass (rhs is static method/static field)
+      (else (myerror "illegal dot operator: " expr))))
 
 ; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation.
 (define (eval-binary-op2 expr op1value fname compiletime-type environment)
