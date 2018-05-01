@@ -80,22 +80,6 @@
 
 
 
-  ;where initialFieldValues are non static variables and fieldValues are static varibales both static and non static methods are stored in the methodNames/Closures
-  (define (decideStateClass l state className return break continue throw catch)
-    (cond
-      ((null? l) (return state))
-       ((list? (operator l)) (decideStateClass (operator l) state className (lambda (v) (decideStateClass (cdr l) v className return continue break exit catch)) continue break exit catch))
-       ((eq? (operator l) 'static-function) (stateFunction l state className return continue break exit catch))
-       ((eq? (operator l) 'function) (stateNonStaticFunction l state className return continue break exit catch))
-       ((eq? (operator l) 'static-var)(stateStaticVariable l state className return continue break exit catch))
-       ((eq? (operator l) 'var)(stateNonStaticVariable l state className return continue break exit catch))
-       (else (return state))))
-
-
-
-
-
-
 ; reads through the methods and binds all the functions and their closures in the state
 ; returns the resulting state
 ; the environment from each step is used by the next one
@@ -285,7 +269,19 @@
     (cond
       ((eq? '! (operator expr)) (not (eval-expression (operand1 expr) fname compiletime-type environment)))
       ((and (eq? '- (operator expr)) (= 2 (length expr))) (- (eval-expression (operand1 expr) fname compiletime-type environment)))
+      ((eq? 'dot (operator expr)) (eval-dot expr fname compiletime-type environment))
       (else (eval-binary-op2 expr (eval-expression (operand1 expr) fname compiletime-type environment) fname compiletime-type environment))))
+
+; evaluate a dot operator
+(define (eval-dot expr fname compiletime-type environment)
+  (cond
+      ((eq? 'var (operand1 expr)) environment)
+      ((eq? 'function (operand1 expr)) environment)
+      ((eq? 'new (operand1 expr)) environment)
+      ((eq? 'this (operand1 expr)) environment)
+      ((eq? 'super (operand1 expr)) environment)
+      ((eq? 'class (operand1 expr)) environment)
+      ))
 
 ; Complete the evaluation of the binary operator by evaluating the second operand and performing the operation.
 (define (eval-binary-op2 expr op1value fname compiletime-type environment)
