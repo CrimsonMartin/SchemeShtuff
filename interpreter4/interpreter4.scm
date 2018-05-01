@@ -76,6 +76,7 @@
   (no-constructors))
 
 
+<<<<<<< HEAD
 
 
 
@@ -104,12 +105,15 @@
 (define (interpret-bind-function-parts fname paramList fbody state)
     (cons (list fname 'global paramList fbody (new-bindings)) state))
 
+=======
+>>>>>>> 1eb4e27c00056b0d3f155caa0ff760aa68fa831f
 ; state already has main declared in body
 ; evaluates for the return value of main function
-(define (eval-main state return break continue throw)
-  (interpret-statement-list (function-body (get-function 'main state)) 'global state return break continue throw))
+(define (eval-main class env return break continue throw)
+  (interpret-statement-list (function-body (get-function 'main (get-class class env)))
+  class env return break continue throw))
 
-
+  
 
 ; returns the function environment, with variables evaluated in the state
 ; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
@@ -122,7 +126,7 @@
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 ; pname is the name of the calling function
-(define (interpret-statement-list statement-list pname compiletime-type environment return break continue throw)
+(define (interpret-statement-list statement-list compiletime-type environment return break continue throw)
     (if (null? statement-list)
         environment
         (interpret-statement-list (cdr statement-list) pname (interpret-statement (car statement-list) pname compiletime-type environment return break continue throw) return break continue throw)))
