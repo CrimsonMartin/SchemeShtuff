@@ -49,27 +49,31 @@
 
 
 ;takes the body of a class and breaks it down into it's pieces for easier acccess
-(define (parsehelper stmt-type body)
+(define (parse-instancefields function class body)
 (cond
   ((null? body) (new-bindings))
-  ((eq? stmt-type (statement-type (car body))) (cons (car body) (parse-instancefields (cdr body))))
-  (else (parsehelper (cdr body)))))
-
-
-
-;takes the body of a class and breaks it down into it's pieces for easier acccess
-(define (parse-instancefields body)
-(parsehelper 'var body))
+  ((eq? 'var (operator body)) (parse-instancefields function )))
+)
 
 ;assuming that static fields can't be initialized to 'novalue (since we don't have fancy constructors, they would never get initialized)
-(define (parse-staticfields body)
-(parsehelper 'static-var body))
+(define (parse-staticfields function class body)
+(cond
+  ((null? body) (new-bindings))
+  ((eq? 'static-var (operator body)) parse-staticfields (insert-binding var val fname class env)
+)
 
-(define (parse-instancefunctions body)
-(parsehelper 'function body))
+(define (parse-instancefunctions function class body)
+(cond
+  ((null? body) NULL)
+  ((eq? 'function (operator body))
+    (operand1 body) (operand2 body)
+    (cons (parse-function 
+)
 
-(define (parse-staticfunctions body)
-(parsehelper 'static-function body))
+(define (parse-staticfunctions function class body)
+(cond
+  ((null? )))
+)
 
 (define (parse-constructors function class body)
 ;change this if we decide to implement strange constructors
