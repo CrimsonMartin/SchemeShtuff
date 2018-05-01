@@ -22,6 +22,7 @@
 
 ; return the environment with a frame removed from the stack
 (define (pop-frame env) (list (remainingframes (stack env)) (state env)))
+(define (top-stack-frame env) (top-frame (stack env)))
 (define (push-frame env) (list (add-frame (new-stack-frame) (stack env)) (state env)))
 ; push a given frame onto the stack
 (define (add-instance-frame frame env) (list (add-frame frame (stack env)) (state env)))
@@ -124,71 +125,72 @@
 (addframe newclass-frame (get-all-other-class oldclass-name state)))
 
 
+; Looks up a value in the environment - entry point function
+; Returns an error if the variable does not have a legal value
+(define (lookup var function class env)
+  (if (not (exists? var function class env))
+    (myerror "error: undefined variable: " var)
+    (lookup-in-env var function class state)))
+
+(define (lookup-in-env var function class env)
+(cond
+  ((not (null? (lookup-instance var function class env)))
+    (lookup-instance var function class env))
+  ((not (null? (lookup-static var function class env)))
+    (lookup-static var function class env))
+  (else NULL)))
+
+;looks up the value of the var, is non-static variable
+(define (lookup-instance var function class env)
+(cond
+  ((not (null? (lookup-in-frame var (top-stack-frame env))))
+    (lookup-in-frame var (top-stack-frame env)))
+  ((eq? 'mainparent (class-parent (get-class class env)))
+    (lookup-instance-class (class-instancefields (get-class class env))))
+  ((not (null? (lookup-instance-class var (class-instancefields (get-class class env)))))
+    (lookup-instance-class var (class-instancefields (get-class class env))))
+  (else (lookup-instance var function (class-parent (get-class class env)) env))))
 
 
+(define (lookup-instance-class var classbindings)
+(lookup-in-frame var classbindings))
+
+(define (lookup-in-frame var stackframe)
+(cond
+  ((not (zero? (indexof var (vars stackframe))))
+    (get-value (indexof var (vars stackframe)) (vals stackframe)))
+  (else NULL)))
 
 
+;looks up the value of the var, is static variable
+(define (lookup-static var function class env)
+(cond
+  ((eq? 'mainparent (class-parent (get-class class env))) NULL)
+  ((exists-in-class? var (get-class class env)) (lookup-in-class-static var class env))
+  (else (lookup-static var function (class-parent (get-class class env)) env))))
 
-
-
+(define (lookup-in-class-static var class env)
+(get-value (indexof var (vars (class-staticfields (get-class class env))))
+  (vals (class-staticfields (get-class class env)))))
 
 
 ;needs to look in the function instance, then class instance, then parent function instances, then in the class instancefields, then class static fields
 ; in that order
 (define (exists? var function class env)
 (cond
-  ((
-  ((exists-in-function? var (get-function function class env)) #t)
-  ;checks class instance fields then class static fields
-  (else (exists-in-class? var (get-class class env)))
-
-
-(define (exists-in-function? var fframe)
-(exists-in-list? var (vars (function-bindings fframe))))
-
-(define (exists-in-class? var cframe)
-(or (exists-in-list? var (vars (class-instance-fields cframe)))
-    (exists-in-list? var (vars (class-static-fields cframe)))))
-
-
-
-; Looks up a value in the environment - entry point function
-; Returns an error if the variable does not have a legal value
-(define (lookup var function class env)
-    (if (not (exists? var function class env))
-      (myerror "error: undefined variable: " var)
-      (lookup-in-env var function class state)))
-
-
-;first check the
-(define (lookup-in-env var function class state)
-(cond
-  ((exists-in-function? var (get-function function (get-class class state)))
-    (lookup-in-function var (get-funciton function (get-class class state))))
-  ((exists-in-class? var (get-class class state)) (lookup-in-class var (get-class class state)))
-  (else
-
-(define (lookup-in-class var cframe)
-(cond
-  ((exists-in-list? var (class-instancefields cframe))
-    (get-value (indexof var (class-instancefields cframe)) (class-instancefields cframe)))
-  (else (get-value (indexof var (class-staticfields cframe)) (class-staticfields cframe)))))
-
-
-(define (lookup-in-function-parent var function class state)
-(lookup var (function-parent (get-function function (class-functions (get-class class state)))) class state))
-
-(define (lookup-in-class-parent var function class state)
-(lookup var function (class-parent (get-class class state)) state))
+  ((not (null? (lookup-instance var function class env))) #t)
+  ((not (null? (lookup-static var function class env))) #t)
+  (else #f)))
 
 
 ; looks up all the values in the list, and returns a list of values
 ; ex ((x y z) (1 2 3)) is the bound variables
 ; input (x y z) returns (1 2 3)
-(define (lookup-list list class state)
+(define (lookup-list list function class env)
   (cond
-    ((null? list) '())
-    (else (cons (lookup var class state) (lookup-list (cdr list) class state)))))
+    ((null? list) NULL)
+    (else (cons (lookup (car list) function class env)
+      (lookup-list (cdr list) function class env)))))
 
 
 
