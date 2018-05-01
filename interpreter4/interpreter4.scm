@@ -76,56 +76,13 @@
   (no-constructors))
 
 
-
-
-
-
-  ;where initialFieldValues are non static variables and fieldValues are static varibales both static and non static methods are stored in the methodNames/Closures
-  (define (decideStateClass l state className return break continue throw catch)
-    (cond
-      ((null? l) (return state))
-       ((list? (operator l)) (decideStateClass (operator l) state className (lambda (v) (decideStateClass (cdr l) v className return continue break exit catch)) continue break exit catch))
-       ((eq? (operator l) 'static-function) (stateFunction l state className return continue break exit catch))
-       ((eq? (operator l) 'function) (stateNonStaticFunction l state className return continue break exit catch))
-       ((eq? (operator l) 'static-var)(stateStaticVariable l state className return continue break exit catch))
-       ((eq? (operator l) 'var)(stateNonStaticVariable l state className return continue break exit catch))
-       (else (return state))))
-
-
-
-
-
-
-; reads through the methods and binds all the functions and their closures in the state
-; returns the resulting state
-; the environment from each step is used by the next one
-(define (interpret-functions input compiletime-type environment)
-  (cond
-    ((null? input) environment)
-    ((and (eq? 'var (statement-type input)) (not (exists-operand2? input))); (var x)
-     (insert (operand1 input) 'novalue 'global compiletime-type environment))
-    ((and (eq? 'var (statement-type input)) (exists-operand2? input)); (var x 10)
-     (insert-binding (operand1 input) (operand2 input) 'global compiletime-type environment))
-    ((equal? 'function (statement-type input)) ;function decleration
-      (interpret-bind-function (cdr input) compiletime-type environment))
-    ((list? (car input)) (interpret-functions (cdr input) (interpret-functions (car input) compiletime-type environment)  ))
-    (else (myerror "illegal global declaration"))))
-
-(define (interpret-bind-function function state)
-  (interpret-bind-function-parts (function-formal-name function) (function-formal-params function) (function-formal-body function) state))
-
-
-; stores the closure of the function in the current state
-; returns the updated state
-(define (interpret-bind-function-parts fname paramList fbody state)
-    (cons (list fname 'global paramList fbody (new-bindings)) state))
-
 ; state already has main declared in body
 ; evaluates for the return value of main function
-(define (eval-main state return break continue throw)
-  (interpret-statement-list (function-body (get-function 'main state)) 'global state return break continue throw))
+(define (eval-main class env return break continue throw)
+  (interpret-statement-list (function-body (get-function 'main (get-class class env)))
+  class env return break continue throw))
 
-
+  
 
 ; returns the function environment, with variables evaluated in the state
 ; ex (x y z) for actual-params params returns ((x y z)(1 2 3))+ rest of function environment
@@ -138,7 +95,7 @@
 
 ; interprets a list of statements.  The environment from each statement is used for the next ones.
 ; pname is the name of the calling function
-(define (interpret-statement-list statement-list pname compiletime-type environment return break continue throw)
+(define (interpret-statement-list statement-list compiletime-type environment return break continue throw)
     (if (null? statement-list)
         environment
         (interpret-statement-list (cdr statement-list) pname (interpret-statement (car statement-list) pname compiletime-type environment return break continue throw) return break continue throw)))
