@@ -52,7 +52,7 @@
 (define (parsehelper stmt-type body)
 (cond
   ((null? body) (new-bindings))
-  ((eq? stmt-type (statement-type (car body))) (cons (car body) (parsehelper (cdr body))))
+  ((eq? stmt-type (statement-type (car body))) (cons (car body) (parse-instancefields (cdr body))))
   (else (parsehelper (cdr body)))))
 
 
