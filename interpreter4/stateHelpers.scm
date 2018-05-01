@@ -192,14 +192,21 @@
       (lookup-list (cdr list) function class env)))))
 
 
-;gets the function's compile time type given function in the environment
-;reads through the stack until it finds a class frame, then it gets the type of that class
-;used for instantiating this. in function calls
+; gets the function's compile time type given function in the environment
+; reads through the stack until it finds a class frame, then it gets the type of that class
+; used for instantiating this. in function calls/try catch
 (define (get-runtype env)
 (cond
   ((null? (stack env)) NULL)
   ((is-classframe? (top-stack-frame env)) (frametype (top-stack-frame env)))
-  (else (get-runtype (pop-frame env))))
+  (else (get-runtype (pop-frame env)))))
+
 
 (define (is-classframe? stackframe)
   (eq? 'class (frametype stackframe)))
+
+
+; gets the compile time type of the funciton, since the function names aren't unique we have to be given the enclosing class to search for the function
+; stored when the funcitons in classes are being bound
+(define (get-compiletype function class env)
+(function-compiletype (get-function function (get-class class env))))
