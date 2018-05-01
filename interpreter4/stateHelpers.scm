@@ -41,8 +41,8 @@
 (define (new-class name parent instancefields staticfields instancefunctions staticfunctions constructors)
 (list name parent instancefields staticfields instancefunctions staticfunctions constructors)
 
-(define (new-function name parent params body bindings)
-(list name parent params body bindings))
+(define (new-function name parent params body bindings compiletype)
+(list name parent params body bindings compiletype))
 
 
 ; create the new class and add it to the state
@@ -50,7 +50,7 @@
 (add-frame (list new-class name parent instancefields staticfields instancefunctions staticfunctions constructors) state)
 
 (define (add-function name parent params body bindings classfunctions)
-(add-frame (list new-function name parent params body bindings) classfunctions))
+(add-frame (new-function name parent params body bindings compiletype) classfunctions))
 
 
 (define (is-static-vbl? var cframe)
@@ -201,7 +201,6 @@
   ((is-classframe? (top-stack-frame env)) (frametype (top-stack-frame env)))
   (else (get-runtype (pop-frame env)))))
 
-
 (define (is-classframe? stackframe)
   (eq? 'class (frametype stackframe)))
 
@@ -210,3 +209,11 @@
 ; stored when the funcitons in classes are being bound
 (define (get-compiletype function class env)
 (function-compiletype (get-function function (get-class class env))))
+
+
+; returns the closure of the runtime type in the environment
+(define (get-this env)
+(cond
+  ((null? (stack env)) NULL)
+  ((is-classframe? (top-stack-frame env)) (top-stack-frame env))
+  (else (get-this (pop-frame env)))))
