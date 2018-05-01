@@ -76,7 +76,37 @@
   (no-constructors))
 
 
+<<<<<<< HEAD
 
+
+
+
+; reads through the methods and binds all the functions and their closures in the state
+; returns the resulting state
+; the environment from each step is used by the next one
+(define (interpret-functions input compiletime-type environment)
+  (cond
+    ((null? input) environment)
+    ((and (eq? 'var (statement-type input)) (not (exists-operand2? input))); (var x)
+     (insert (operand1 input) 'novalue 'global compiletime-type environment))
+    ((and (eq? 'var (statement-type input)) (exists-operand2? input)); (var x 10)
+     (insert-binding (operand1 input) (operand2 input) 'global compiletime-type environment))
+    ((equal? 'function (statement-type input)) ;function decleration
+      (interpret-bind-function (cdr input) compiletime-type environment))
+    ((list? (car input)) (interpret-functions (cdr input) (interpret-functions (car input) compiletime-type environment)  ))
+    (else (myerror "illegal global declaration"))))
+
+(define (interpret-bind-function function state)
+  (interpret-bind-function-parts (function-formal-name function) (function-formal-params function) (function-formal-body function) state))
+
+
+; stores the closure of the function in the current state
+; returns the updated state
+(define (interpret-bind-function-parts fname paramList fbody state)
+    (cons (list fname 'global paramList fbody (new-bindings)) state))
+
+=======
+>>>>>>> 1eb4e27c00056b0d3f155caa0ff760aa68fa831f
 ; state already has main declared in body
 ; evaluates for the return value of main function
 (define (eval-main class env return break continue throw)
